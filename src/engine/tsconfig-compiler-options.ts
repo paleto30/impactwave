@@ -28,25 +28,59 @@ const MAX_EXTENDS_DEPTH = 16;
  * Options whose JSON values are enum names ("es2020", "commonjs", ...).
  * createProgram rejects raw strings, so they must be converted to their
  * numeric value before reaching the Project.
+ *
+ * Aliases cover config spellings that differ from the enum member names
+ * (e.g. "node" for NodeJs, "es6" for ES2015).
  */
-const ENUM_OPTION_MAPS: Record<string, Record<string, number>> = {
-    target: ScriptTarget as unknown as Record<string, number>,
-    module: ModuleKind as unknown as Record<string, number>,
-    moduleResolution: ModuleResolutionKind as unknown as Record<string, number>,
-    newLine: NewLineKind as unknown as Record<string, number>
+const ENUM_OPTION_CONVERSIONS: Record<
+    string,
+    { enumMap: Record<string, number>; aliases?: Record<string, string> }
+> = {
+    target: {
+        enumMap: ScriptTarget as unknown as Record<string, number>,
+        aliases: { es6: "es2015", es7: "es2016" }
+    },
+    module: {
+        enumMap: ModuleKind as unknown as Record<string, number>,
+        aliases: { es6: "es2015", es7: "es2016" }
+    },
+    moduleResolution: {
+        enumMap: ModuleResolutionKind as unknown as Record<string, number>,
+        aliases: { node: "nodejs" }
+    },
+    newLine: {
+        enumMap: NewLineKind as unknown as Record<string, number>
+    }
 };
 
-function normalizeEnumValues(options: Record<string, unknown>): Record<string, unknown> {
+/**
+ * Enum-valued options with no exported enum to convert from. A leftover
+ * string here would crash createProgram later ("... is a string value"), so
+ * the value is dropped with a warning instead — degraded but working
+ * analysis beats a hard failure on React-style configs.
+ */
+const UNCONVERTIBLE_ENUM_KEYS = new Set([
+    "jsx",
+    "moduleDetection",
+    "importsNotUsedAsValues"
+]);
+
+function normalizeEnumValues(
+    options: Record<string, unknown>
+): Record<string, unknown> {
     const normalized = { ...options };
 
-    for (const [key, enumMap] of Object.entries(ENUM_OPTION_MAPS)) {
+    for (const [key, conversion] of Object.entries(ENUM_OPTION_CONVERSIONS)) {
         const value = normalized[key];
         if (typeof value !== "string") continue;
 
-        const match = Object.entries(enumMap).find(
+        const aliasKey = conversion.aliases?.[value.toLowerCase()];
+        const lookupKey = (aliasKey ?? value).toLowerCase();
+
+        const match = Object.entries(conversion.enumMap).find(
             ([name, numeric]) =>
                 typeof numeric === "number" &&
-                name.toLowerCase() === value.toLowerCase()
+                name.toLowerCase() === lookupKey
         );
 
         if (match) {
@@ -55,6 +89,17 @@ function normalizeEnumValues(options: Record<string, unknown>): Record<string, u
             // Unknown value for this option: drop it rather than hand an
             // invalid string to createProgram later
             delete normalized[key];
+        }
+    }
+
+    for (const key of UNCONVERTIBLE_ENUM_KEYS) {
+        const value = normalized[key];
+        if (typeof value === "string") {
+            delete normalized[key];
+            process.stderr.write(
+                `[impactwave] ignoring "${key}": "${value}" from tsconfig ` +
+                    "(unsupported option value; analysis continues)\n"
+            );
         }
     }
 

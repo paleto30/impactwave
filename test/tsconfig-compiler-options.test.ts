@@ -7,7 +7,10 @@ import {
     readTsConfigCompilerOptions
 } from "../src/engine/tsconfig-compiler-options.js";
 import { getProject } from "../src/engine/project.js";
-import { ScriptTarget } from "ts-morph";
+import {
+    ModuleResolutionKind,
+    ScriptTarget
+} from "ts-morph";
 
 describe("readTsConfigCompilerOptions", () => {
     let dir: string;
@@ -74,6 +77,51 @@ describe("readTsConfigCompilerOptions", () => {
         assert.equal(options.strict, true);
         assert.equal(options.experimentalDecorators, true);
         assert.equal(options.target, ScriptTarget.ES2020);
+    });
+
+    it("maps legacy config spellings to their enum values", () => {
+        const root = createDir();
+        writeFileSync(
+            path.join(root, "tsconfig.json"),
+            JSON.stringify({
+                compilerOptions: {
+                    target: "es6",
+                    moduleResolution: "node"
+                }
+            })
+        );
+
+        const options = readTsConfigCompilerOptions(
+            path.join(root, "tsconfig.json")
+        );
+
+        assert.equal(options.target, ScriptTarget.ES2015);
+        assert.equal(options.moduleResolution, ModuleResolutionKind.NodeJs);
+    });
+
+    it("drops unsupported string enum options instead of crashing later", () => {
+        const root = createDir();
+        writeFileSync(
+            path.join(root, "tsconfig.json"),
+            JSON.stringify({
+                compilerOptions: {
+                    jsx: "react-jsx",
+                    moduleDetection: "force",
+                    strict: true
+                }
+            })
+        );
+
+        let options: Record<string, unknown>;
+        assert.doesNotThrow(() => {
+            options = readTsConfigCompilerOptions(
+                path.join(root, "tsconfig.json")
+            );
+        });
+
+        assert.ok(!("jsx" in options!));
+        assert.ok(!("moduleDetection" in options!));
+        assert.equal(options!.strict, true);
     });
 
     it("returns empty options for missing or broken configs", () => {
