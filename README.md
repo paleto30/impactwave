@@ -156,6 +156,7 @@ Cada análisis imprime contexto Git, evaluación de riesgo con score y razones, 
 - La cobertura de tests se basa en imports directos de los archivos de test (no transitiva).
 - El grafo solo considera imports relativos (no `node_modules` ni path aliases).
 - En monorepos, el análisis cubre `<raíz>/src/**/*.ts`; código fuera de `src/` no se analiza.
+- Los directorios sin permiso de lectura (ej. `pg_data`) se omiten; no abortan el análisis.
 
 ## Desarrollo
 

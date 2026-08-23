@@ -1,6 +1,7 @@
 import path from "node:path";
 import { existsSync } from "node:fs";
 import { Project } from "ts-morph";
+import { addProjectSourceFiles } from "./project-files.js";
 
 let sharedProject: Project | undefined;
 let sharedProjectRoot: string | undefined;
@@ -13,24 +14,23 @@ let sharedProjectRoot: string | undefined;
  * files multiple times with different projects.
  *
  * A root tsconfig.json is optional: monorepo workspaces usually have one
- * tsconfig per package and none at the root. In that case default compiler
- * options are used and src/ is scanned explicitly — required because symbol
- * impact analysis runs before buildDependencyGraph loads any files, so
- * findReferences would otherwise resolve against an empty project.
+ * tsconfig per package and none at the root. Either way, source files are
+ * discovered by an explicit resilient walk (see project-files) instead of
+ * letting TypeScript enumerate the tree — unreadable directories like
+ * Docker data folders must not crash the analysis.
  */
 export function getProject(projectRoot: string): Project {
     if (!sharedProject || sharedProjectRoot !== projectRoot) {
         const tsconfigPath = path.join(projectRoot, "tsconfig.json");
 
-        if (existsSync(tsconfigPath)) {
-            sharedProject = new Project({
+        sharedProject = existsSync(tsconfigPath)
+            ? new Project({
                 tsConfigFilePath: tsconfigPath,
-                skipAddingFilesFromTsConfig: false
-            });
-        } else {
-            sharedProject = new Project();
-            sharedProject.addSourceFilesAtPaths(`${projectRoot}/src/**/*.ts`);
-        }
+                skipAddingFilesFromTsConfig: true
+            })
+            : new Project();
+
+        addProjectSourceFiles(sharedProject, projectRoot);
 
         sharedProjectRoot = projectRoot;
     }

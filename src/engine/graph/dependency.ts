@@ -6,9 +6,9 @@ import type { TransitiveImpact } from "./transitive-impact.interface.js";
 export function buildDependencyGraph(projectRoot: string): DependencyGraph {
     const project = getProject(projectRoot);
 
-    // Add all project source files (idempotent: files already loaded via the
-    // tsconfig are reused, not re-parsed)
-    project.addSourceFilesAtPaths(`${projectRoot}/src/**/*.ts`);
+    // All project source files are already loaded by getProject through the
+    // resilient walk (idempotent: files already added are reused, not
+    // re-parsed)
 
     const dependents = new Map<string, string[]>();
     const imports = new Map<string, string[]>();

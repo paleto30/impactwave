@@ -154,14 +154,15 @@ Ejemplo real: se modificó `PaymentService.calculate()` (cambio de tasa 0.19 →
 
 ```
     ├─ Exported symbols
-    │    └─ ✏️  PaymentService (class, 1 method) (2 lines modified) (calculate method modified)
+    │    └─ ✏️  PaymentService (class, 1 method) (2 lines modified)
+    │          └─ ✏️  calculate method modified
     │    └─ Invoice (interface)
 ```
 **Símbolos exportados** — lo que el archivo expone al resto del proyecto. Para cada símbolo tocado por el diff:
 
 - **✏️** — el símbolo fue tocado por el diff (no todo el archivo: solo las declaraciones cuyas líneas cambiaron).
 - **`(N lines modified)`** — cuántas líneas del diff caen dentro de la declaración de ese símbolo.
-- **`(metodo method(s) modified)`** — en clases, los métodos **públicos concretos** cuyas líneas fueron modificadas. Los métodos privados/protegidos no se listan: no forman parte de la superficie que pueden consumir otros archivos.
+- **Métodos como subárbol** — en clases, cada método **público** modificado se lista como nodo hijo del símbolo (`✏️  metodo method modified`). Los métodos privados/protegidos no se listan: no forman parte de la superficie que pueden consumir otros archivos.
 
 Los símbolos sin ✏️ existen en el archivo pero no fueron tocados por este cambio.
 
@@ -226,7 +227,7 @@ Este bloque es informativo: el riesgo real NO se calcula sobre él, sino sobre l
 |---|---|
 | ✏️ `(modified)` en un símbolo | El símbolo fue tocado por el diff |
 | `(N lines modified)` en un símbolo | Cuántas líneas del diff caen dentro de su declaración |
-| `(metodo1, metodo2 methods modified)` | Métodos concretos de la clase tocados por el diff (solo métodos públicos) |
+| `✏️  metodo method modified` (bajo la clase) | Método concreto de la clase tocado por el diff (solo métodos públicos) |
 | `score` alto + `CRITICAL` | Cambio en código muy consumido, con poca cobertura o gran profundidad |
 | `Impact coverage` bajo | Las áreas afectadas no están cubiertas por tests — el riesgo real puede ser mayor que el score global |
 | Archivo en "Uncovered" | Área afectada sin tests → candidato a escribir tests |
@@ -241,6 +242,7 @@ Este bloque es informativo: el riesgo real NO se calcula sobre él, sino sobre l
 - El grafo solo considera imports relativos (no `node_modules` ni path aliases no relativos).
 - La granularidad de "símbolo modificado" es la declaración top-level; dentro de clases, el reporte indica además los métodos públicos concretos modificados (los privados/protegidos no se reportan).
 - **En monorepos**: el análisis cubre siempre `<raíz>/src/**/*.ts`. Si el proyecto tiene código fuera de `src/` (ej. `packages/`, `app/`, tsconfigs por workspace), esos archivos no se cargan y sus símbolos no aparecen en el reporte. El soporte completo de monorepos (múltiples tsconfigs y directorios arbitrarios) está planificado en `ROADMAP.md` como mejora futura, fuera del alcance del MVP.
+- **Directorios ilegibles**: carpetas sin permiso de lectura (ej. `pg_data` de Docker) se omiten del análisis en silencio; nunca abortan la ejecución.
 
 ## 6. Más información
 

@@ -154,14 +154,15 @@ Real example: `PaymentService.calculate()` was modified (rate change 0.19 → 0.
 
 ```
     ├─ Exported symbols
-    │    └─ ✏️  PaymentService (class, 1 method) (2 lines modified) (calculate method modified)
+    │    └─ ✏️  PaymentService (class, 1 method) (2 lines modified)
+    │          └─ ✏️  calculate method modified
     │    └─ Invoice (interface)
 ```
 **Exported symbols** — what the file exposes to the rest of the project. For each symbol touched by the diff:
 
 - **✏️** — the symbol was touched by the diff (not the whole file: only declarations whose lines changed).
 - **`(N lines modified)`** — how many diff lines fall inside that symbol's declaration.
-- **`(method method(s) modified)`** — in classes, the concrete **public** methods whose lines were modified. Private/protected methods are not listed: they are not part of the surface other files can consume.
+- **Methods as a subtree** — in classes, each modified **public** method is listed as a child node of the symbol (`✏️  method method modified`). Private/protected methods are not listed: they are not part of the surface other files can consume.
 
 Symbols without ✏️ exist in the file but were not touched by this change.
 
@@ -226,7 +227,7 @@ This block is informational: real risk is NOT computed from it, but from real sy
 |---|---|
 | ✏️ `(modified)` on a symbol | The symbol was touched by the diff |
 | `(N lines modified)` on a symbol | How many diff lines fall inside its declaration |
-| `(metodo1, metodo2 methods modified)` | Concrete class methods touched by the diff (public only) |
+| `✏️  method method modified` (under the class) | Concrete class method touched by the diff (public only) |
 | High `score` + `CRITICAL` | Change in heavily consumed code, low coverage or great depth |
 | Low `Impact coverage` | Affected areas are not covered by tests — real risk may be higher than the global score |
 | File under "Uncovered" | Affected area without tests → candidate for writing tests |
@@ -241,6 +242,7 @@ This block is informational: real risk is NOT computed from it, but from real sy
 - The graph only considers relative imports (no `node_modules` nor non-relative path aliases).
 - "Modified symbol" granularity is the top-level declaration; within classes, the report also lists the concrete modified public methods (private/protected ones are not reported).
 - **In monorepos**: the analysis always covers `<root>/src/**/*.ts`. If the project has code outside `src/` (e.g. `packages/`, `app/`, per-workspace tsconfigs), those files are not loaded and their symbols don't appear in the report. Full monorepo support (multiple tsconfigs and arbitrary directories) is planned in `ROADMAP.md` as future work, outside the MVP scope.
+- **Unreadable directories**: folders without read permission (e.g. Docker's `pg_data`) are silently skipped; they never abort the analysis.
 
 ## 6. More information
 
