@@ -85,6 +85,7 @@ Tip: running bare "impactwave" inside a Git repository is equivalent to
 |---|---|
 | `-b, --base <branch>` | Rama base a comparar (autodetección: `origin/HEAD` → `main`/`master` → `HEAD~1`) |
 | `--risk-weights <json>` | Pesos personalizados de los factores de riesgo. Ver [modelo de riesgo](#modelo-de-riesgo) |
+| `--json` | Reporte como JSON en stdout, con contrato versionado (`meta.schemaVersion`) y [esquema publicado](docs/schema-v1.json). Ideal para CI |
 
 ### Ejemplos
 
@@ -100,12 +101,18 @@ impactwave --risk-weights '{"callerImpact":30,"testGaps":35}'
 
 # Puntuar solo por consumidores directos de los símbolos modificados
 impactwave analyze --risk-weights '{"callerImpact":100}'
+
+# Salida machine-readable para pipelines (stdout puro, warnings en stderr)
+impactwave --json | jq '.risk'
+
+# Gate de merge: falla si el nivel no es LOW ni MEDIUM
+impactwave analyze --json -b main | jq -e '.risk.level | inside("LOW|MEDIUM")' > /dev/null
 ```
 
 ## Cómo funciona
 
 1. **Git**: detecta el repo, la rama base y los archivos modificados (A/M/D).
-2. **AST**: ts-morph extrae exports e imports de los archivos cambiados, usando un único proyecto indexado con tu `tsconfig.json`. Si el repo no tiene tsconfig en la raíz (típico en monorepos), hace *fallback* al escaneo explícito de `src/**/*.ts`.
+2. **AST**: ts-morph extrae exports e imports de los archivos cambiados, usando un único proyecto con los `compilerOptions` de tu `tsconfig.json` raíz y los archivos descubiertos por un recorrido propio del árbol (tolerante a directorios ilegibles).
 3. **Símbolos modificados**: intersecta los rangos de líneas de cada símbolo exportado con las líneas del diff.
 4. **Consumidores reales**: `findReferences` encuentra los usos activos de cada símbolo (los imports puros no cuentan como impacto).
 5. **Grafo de dependencias**: índice inverso y directo de imports relativos + recorrido transitivo (BFS) con profundidad.
@@ -150,12 +157,21 @@ Cada análisis imprime contexto Git, evaluación de riesgo con score y razones, 
 
 📖 **Cómo leer el reporte completo, sección por sección** → [docs/GUIA.md](docs/GUIA.md)
 
+### Salida JSON para CI
+
+`impactwave analyze --json` emite el mismo reporte como un único documento
+JSON en stdout (las advertencias van a `stderr`). El formato está versionado
+(`meta.schemaVersion`) y publicado como [JSON Schema](docs/schema-v1.json):
+dentro de una versión solo hay cambios aditivos. Los usos de símbolos viajan
+sin filtrar, marcados con `importOnly: true` cuando son solo cableado de
+contrato (`import`, re-exports).
+
 ## Limitaciones conocidas
 
 - Compara commits; los cambios sin commitear en el working tree no se analizan.
 - La cobertura de tests se basa en imports directos de los archivos de test (no transitiva).
 - El grafo solo considera imports relativos (no `node_modules` ni path aliases).
-- En monorepos, el análisis cubre `<raíz>/src/**/*.ts`; código fuera de `src/` no se analiza.
+- En monorepos con varios tsconfigs, solo se usa el de la raíz; el descubrimiento de fuentes recorre todo el árbol (omitiendo `node_modules`/`dist`/`build`, ocultos y rutas ilegibles).
 - Los directorios sin permiso de lectura (ej. `pg_data`) se omiten; no abortan el análisis.
 
 ## Desarrollo
@@ -168,7 +184,7 @@ npm run dev    # ejecutar en desarrollo
 
 Los fixtures en `test/fixtures/` validan el análisis contra proyectos artificiales: `simple-project` (cadena A→B→C), `circular-dependencies` (X↔Y), `barrel-exports` (re-exports por barrel) y `test-coverage` (servicios con y sin tests).
 
-Para contribuir: abre un [issue](https://github.com/paleto30/impactwave/issues) o envía un PR. Las mejoras candidatas están documentadas en [docs/ROADMAP.md](docs/ROADMAP.md) (salida JSON para CI, gate de merges, configuración por proyecto…).
+Para contribuir: abre un [issue](https://github.com/paleto30/impactwave/issues) o envía un PR. Las prioridades y mejoras candidatas están documentadas en [docs/ROADMAP.md](docs/ROADMAP.md); el historial de versiones, en [CHANGELOG.md](CHANGELOG.md).
 
 ## Licencia
 

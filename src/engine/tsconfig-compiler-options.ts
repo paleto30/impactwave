@@ -65,8 +65,14 @@ const UNCONVERTIBLE_ENUM_KEYS = new Set([
     "importsNotUsedAsValues"
 ]);
 
+export type TsConfigWarning = {
+    code: "unsupported-tsconfig-option";
+    message: string;
+};
+
 function normalizeEnumValues(
-    options: Record<string, unknown>
+    options: Record<string, unknown>,
+    onWarning?: (warning: TsConfigWarning) => void
 ): Record<string, unknown> {
     const normalized = { ...options };
 
@@ -89,6 +95,10 @@ function normalizeEnumValues(
             // Unknown value for this option: drop it rather than hand an
             // invalid string to createProgram later
             delete normalized[key];
+            onWarning?.({
+                code: "unsupported-tsconfig-option",
+                message: `ignoring "${key}": "${value}" from tsconfig (unknown value)`
+            });
         }
     }
 
@@ -96,18 +106,25 @@ function normalizeEnumValues(
         const value = normalized[key];
         if (typeof value === "string") {
             delete normalized[key];
-            process.stderr.write(
-                `[impactwave] ignoring "${key}": "${value}" from tsconfig ` +
-                    "(unsupported option value; analysis continues)\n"
-            );
+            onWarning?.({
+                code: "unsupported-tsconfig-option",
+                message:
+                    `ignoring "${key}": "${value}" from tsconfig ` +
+                    "(unsupported option value; analysis continues)"
+            });
         }
     }
 
     return normalized;
 }
 
+/**
+ * The optional warning sink keeps this module presentation-free: callers
+ * decide where warnings go (stderr for humans, the warnings array for JSON).
+ */
 export function readTsConfigCompilerOptions(
-    tsconfigPath: string
+    tsconfigPath: string,
+    onWarning?: (warning: TsConfigWarning) => void
 ): Record<string, unknown> {
     const resolved = path.resolve(tsconfigPath);
     const config = resolveConfig(resolved, new Set<string>(), 0);
@@ -115,7 +132,7 @@ export function readTsConfigCompilerOptions(
     if (typeof options !== "object" || options === null) {
         return {};
     }
-    return normalizeEnumValues(options as Record<string, unknown>);
+    return normalizeEnumValues(options as Record<string, unknown>, onWarning);
 }
 
 function resolveConfig(

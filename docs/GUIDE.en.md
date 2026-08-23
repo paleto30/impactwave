@@ -46,6 +46,7 @@ npm run dev
 |---|---|
 | `-b, --base <branch>` | Base branch to compare against. If omitted, it is auto-detected: `origin/HEAD` → `main`/`master` → `HEAD~1`. |
 | `--risk-weights <json>` | Tune the weights of the risk factors (see [2.1. Configurable risk weights](#21-configurable-risk-weights)). |
+| `--json` | Print the report as JSON to stdout (versioned contract; see [2.2. JSON output](#22-json-output---json)). |
 
 ### 2.1 Configurable risk weights
 
@@ -81,6 +82,34 @@ impactwave --risk-weights '{"callerImpact":30,"affectedFiles":10,"dependencyDept
 # Only consumers matter (all other factors default to 0):
 impactwave --risk-weights '{"callerImpact":100}'
 ```
+
+### 2.2 JSON output (`--json`)
+
+For tools, scripts and CI pipelines:
+
+```bash
+impactwave --json | jq '.risk'          # score, level and reasons
+impactwave analyze --json -b main       # combinable with the other options
+```
+
+- **Pure stdout**: with `--json`, stdout carries exactly one JSON document
+  (no colors, no text). Warnings still go to `stderr`.
+- **Versioned contract**: `meta.schemaVersion` identifies the contract
+  version (`1` today). Within a schema version only **additive** changes are
+  allowed (new fields); anything that breaks compatibility bumps the version.
+- **Published schema**: [`docs/schema-v1.json`](schema-v1.json)
+  (JSON Schema draft 2020-12), validated against real output on every change.
+- **Raw data**: symbol usages are not filtered — connections that are only
+  contract wiring (`import`, re-exports) travel flagged as `importOnly: true`
+  so each consumer can apply its own policy.
+- Document structure: `meta` (versions, branch and base), `warnings` (stable
+  codes), `summary`, `risk {score, level, reasons}`, `impactCoverage` and
+  `changedFiles[]` (exported symbols with modification marks, dependents,
+  blast radius by cascade level, consumers and related tests).
+
+The same object is available programmatically through the `analyzeProject()`
+facade (`src/engine/analyze.ts`) to embed ImpactWave in other tools without
+going through the CLI.
 
 ### What it compares
 
@@ -241,10 +270,12 @@ This block is informational: real risk is NOT computed from it, but from real sy
 - Test coverage is based on **direct** imports of test files (not transitive).
 - The graph only considers relative imports (no `node_modules` nor non-relative path aliases).
 - "Modified symbol" granularity is the top-level declaration; within classes, the report also lists the concrete modified public methods (private/protected ones are not reported).
-- **In monorepos**: the analysis always covers `<root>/src/**/*.ts`. If the project has code outside `src/` (e.g. `packages/`, `app/`, per-workspace tsconfigs), those files are not loaded and their symbols don't appear in the report. Full monorepo support (multiple tsconfigs and arbitrary directories) is planned in `ROADMAP.md` as future work, outside the MVP scope.
+- **Analysis scope**: source discovery walks the whole repository tree (skipping `node_modules`/`dist`/`build`, hidden directories, symlinks and unreadable paths) and adds every `.ts/.tsx`; the root tsconfig contributes only its `compilerOptions`, never its file globbing. In monorepos with several tsconfigs, only the root one is used.
 - **Unreadable directories**: folders without read permission (e.g. Docker's `pg_data`) are silently skipped; they never abort the analysis.
 
 ## 6. More information
 
 - [README.en.md](../README.en.md) — project overview (also in [Spanish](../README.md)).
+- [schema-v1.json](schema-v1.json) — JSON schema of the `--json` contract.
+- [CHANGELOG.md](../CHANGELOG.md) — release history.
 - `test/fixtures/` — sample projects used by the test suite (`npm test`).

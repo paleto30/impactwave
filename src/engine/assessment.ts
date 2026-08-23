@@ -49,7 +49,8 @@ export function computeAssessment(
     reportItems: ImpactReportItem[],
     testMapping: TestMapping,
     changedLines: number,
-    riskWeights?: RiskWeights
+    riskWeights?: RiskWeights,
+    projectRoot: string = process.cwd()
 ): AssessmentResult {
     const uniqueImpactedFiles = new Set<string>();
 
@@ -84,7 +85,7 @@ export function computeAssessment(
     for (const file of uniqueImpactedFiles) {
         if (isTestFile(file) || affectedAnalyses.has(file)) continue;
         try {
-            affectedAnalyses.set(file, analyzeFile(file));
+            affectedAnalyses.set(file, analyzeFile(file, projectRoot));
         } catch {
             // Non-parseable file: keep it counted as an affected area
         }

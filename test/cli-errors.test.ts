@@ -41,10 +41,12 @@ describe("CLI error handling", () => {
         rmSync(nonRepo, { recursive: true, force: true });
     });
 
-    it("reports when the directory is not a git repository", () => {
+    it("fails when the directory is not a git repository", () => {
+        // Behavior fix (1.1.0): previously this exited 0 silently; a missing
+        // repository is a usage error like any other.
         const result = runCli(nonRepo, ["analyze", "-b", "HEAD~1"]);
-        assert.equal(result.status, 0);
-        assert.match(result.stdout, /This directory is not a Git repository/);
+        assert.equal(result.status, 1);
+        assert.match(result.stderr, /is not a Git repository/);
     });
 
     it("fails when the base branch does not exist", () => {

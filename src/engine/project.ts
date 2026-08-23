@@ -2,7 +2,10 @@ import path from "node:path";
 import { existsSync } from "node:fs";
 import { Project, type CompilerOptions } from "ts-morph";
 import { addProjectSourceFiles } from "./project-files.js";
-import { readTsConfigCompilerOptions } from "./tsconfig-compiler-options.js";
+import {
+    readTsConfigCompilerOptions,
+    type TsConfigWarning
+} from "./tsconfig-compiler-options.js";
 
 let sharedProject: Project | undefined;
 let sharedProjectRoot: string | undefined;
@@ -20,7 +23,10 @@ let sharedProjectRoot: string | undefined;
  * enumerate the tree — unreadable directories like Docker data folders must
  * not crash the analysis, so include/exclude are intentionally not honored.
  */
-export function getProject(projectRoot: string): Project {
+export function getProject(
+    projectRoot: string,
+    onTsConfigWarning?: (warning: TsConfigWarning) => void
+): Project {
     if (!sharedProject || sharedProjectRoot !== projectRoot) {
         const tsconfigPath = path.join(projectRoot, "tsconfig.json");
 
@@ -29,7 +35,8 @@ export function getProject(projectRoot: string): Project {
                 // raw JSON values (string enums, arrays) are valid here and
                 // avoid any TypeScript-side filesystem enumeration
                 compilerOptions: readTsConfigCompilerOptions(
-                    tsconfigPath
+                    tsconfigPath,
+                    onTsConfigWarning
                 ) as CompilerOptions
             })
             : new Project();

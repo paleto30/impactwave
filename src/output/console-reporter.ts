@@ -1,13 +1,12 @@
-import { FileStatus } from "../git/file-status.js";
-import type { RiskLevel } from "../risk/risk.types.js";
-import type { TestMapping } from "../testing/test-mapping.interface.js";
-import type { ImpactCoverage } from "../testing/impact-coverage.interface.js";
-import type { AssessmentResult } from "../assessment-result.interface.js";
-import type { ImpactReportItem } from "../impact-report-item.interface.js";
-import { isTestFile } from "../testing/test-mapping.js";
+import type { RiskLevel } from "../engine/risk/risk.types.js";
+import type {
+    AnalysisResult,
+    ChangedFileReport,
+    ExportedSymbolJson
+} from "../engine/analysis-result.interface.js";
+import { isTestFile } from "../engine/testing/test-mapping.js";
 import { colors, BOX_WIDTH } from "./colors.js";
-import { buildExportedSymbolsView, formatSymbolKind } from "./symbols-view.js";
-import { isImportOnlyUsage } from "../analyzer/usage-filter.js";
+import { formatSymbolKind } from "../engine/reporter/symbols-view.js";
 
 function boxTop(label: string, color: string): void {
     console.log(`${color}╭─ ${label} ${"─".repeat(BOX_WIDTH - 5 - label.length)}╮${colors.reset}`);
@@ -46,52 +45,45 @@ const riskStyles: Record<RiskLevel, { emoji: string; description: string }> = {
     }
 };
 
-export interface ReportOptions {
-    gitContext?: { branch: string; base: string };
-    testMapping?: TestMapping;
-    assessment: AssessmentResult;
-    skippedFiles?: number;
-}
-
-export function printConsoleReport(
-    reportItems: ImpactReportItem[],
-    options: ReportOptions
-): void {
-    const { gitContext, testMapping, assessment, skippedFiles = 0 } = options;
-
+/**
+ * Renders the human-readable report from the serializable AnalysisResult.
+ *
+ * Presentation-only by contract: it never mutates the result and prints
+ * exclusively to stdout. Byte-for-byte stability is enforced by the golden
+ * test (test/report-golden.test.ts).
+ */
+export function printConsoleReport(result: AnalysisResult): void {
     console.log("");
     boxHeader();
-    printGitContext(gitContext);
+    printGitContext(result);
     printDescription();
-    printRiskAssessment(assessment);
-    printImpactCoverage(assessment.impactCoverage);
+    printRiskAssessment(result);
+    printImpactCoverage(result.impactCoverage);
 
-    for (const item of reportItems) {
+    for (const item of result.changedFiles) {
         printFileSection(item);
     }
 
-    printSummary(reportItems, assessment, testMapping);
-    printRecommendedAction(assessment);
+    printSummary(result);
+    printRecommendedAction(result);
 
-    if (skippedFiles > 0) {
+    if (result.summary.skippedFiles > 0) {
         console.log(
-            `${colors.dim}⚠️  ${skippedFiles} file(s) skipped (non-parseable or binary).${colors.reset}`
+            `${colors.dim}⚠️  ${result.summary.skippedFiles} file(s) skipped (non-parseable or binary).${colors.reset}`
         );
     }
 }
 
-function printGitContext(gitContext?: { branch: string; base: string }): void {
-    if (!gitContext) return;
-
+function printGitContext(result: AnalysisResult): void {
     console.log("");
     console.log(` ${colors.bold}📂 Git Context${colors.reset}`);
     console.log(
         `    ${colors.gray}├─ Branch     :${colors.reset} ` +
-        `${colors.bold}${gitContext.branch}${colors.reset}`
+        `${colors.bold}${result.meta.branch}${colors.reset}`
     );
     console.log(
         `    ${colors.gray}└─ Comparing  :${colors.reset} ` +
-        `${colors.bold}HEAD vs ${gitContext.base}${colors.reset}`
+        `${colors.bold}HEAD vs ${result.meta.base}${colors.reset}`
     );
 }
 
@@ -105,25 +97,26 @@ function printDescription(): void {
     );
 }
 
-function printRiskAssessment(assessment: AssessmentResult): void {
-    const { riskAssessment, uniqueDependentFiles } = assessment;
+function printRiskAssessment(result: AnalysisResult): void {
+    const { risk } = result;
+    const dependentFiles = result.summary.dependentFiles;
 
-    const riskLevelText = `${riskStyles[riskAssessment.level].emoji} ${riskAssessment.level} RISK`;
+    const riskLevelText = `${riskStyles[risk.level].emoji} ${risk.level} RISK`;
 
     console.log("");
     boxTop("Risk Assessment", colors.yellow);
     console.log(
         `${colors.yellow}│${colors.reset} ${riskLevelText} ` +
-        `${colors.dim}(score: ${riskAssessment.score}/100)${colors.reset}`
+        `${colors.dim}(score: ${risk.score}/100)${colors.reset}`
     );
     console.log(
         `${colors.yellow}│${colors.reset}`
     );
     console.log(
-        `${colors.yellow}│${colors.reset} ${colors.gray}${riskStyles[riskAssessment.level].description}${colors.reset}`
+        `${colors.yellow}│${colors.reset} ${colors.gray}${riskStyles[risk.level].description}${colors.reset}`
     );
     console.log(
-        `${colors.yellow}│${colors.reset} ${colors.gray}${uniqueDependentFiles} unique dependent file${uniqueDependentFiles === 1 ? "" : "s"} at risk${colors.reset}`
+        `${colors.yellow}│${colors.reset} ${colors.gray}${dependentFiles} unique dependent file${dependentFiles === 1 ? "" : "s"} at risk${colors.reset}`
     );
     console.log(
         `${colors.yellow}│${colors.reset}`
@@ -131,7 +124,7 @@ function printRiskAssessment(assessment: AssessmentResult): void {
     console.log(
         `${colors.yellow}│${colors.reset} ${colors.bold}Reasons:${colors.reset}`
     );
-    for (const reason of riskAssessment.reasons) {
+    for (const reason of risk.reasons) {
         console.log(
             `${colors.yellow}│${colors.reset}   ${colors.gray}•${colors.reset} ${reason.label}` +
             (reason.points > 0 ? ` ${colors.dim}(${reason.points} pts)${colors.reset}` : "")
@@ -140,7 +133,7 @@ function printRiskAssessment(assessment: AssessmentResult): void {
     boxFooter(colors.yellow);
 }
 
-function printImpactCoverage(impactCoverage: ImpactCoverage): void {
+function printImpactCoverage(impactCoverage: AnalysisResult["impactCoverage"]): void {
     console.log("");
     boxTop("Impact Coverage", colors.blue);
     console.log(
@@ -177,14 +170,14 @@ function printImpactCoverage(impactCoverage: ImpactCoverage): void {
     boxFooter(colors.blue);
 }
 
-function printFileSection(item: ImpactReportItem): void {
+function printFileSection(item: ChangedFileReport): void {
     let statusColor = colors.blue;
     let statusLabel = "MODIFIED";
 
-    if (item.file.status === FileStatus.Added) {
+    if (item.status === "added") {
         statusColor = colors.green;
         statusLabel = "ADDED";
-    } else if (item.file.status === FileStatus.Deleted) {
+    } else if (item.status === "deleted") {
         statusColor = colors.red;
         statusLabel = "DELETED";
     }
@@ -194,7 +187,7 @@ function printFileSection(item: ImpactReportItem): void {
     console.log(
         `${colors.cyan}│${colors.reset} ` +
         `${colors.bold}📄 [${statusColor}${statusLabel}${colors.reset}${colors.bold}] ` +
-        `${item.file.path}${colors.reset}`
+        `${item.path}${colors.reset}`
     );
     boxFooter(colors.cyan);
 
@@ -204,10 +197,8 @@ function printFileSection(item: ImpactReportItem): void {
     printRelatedTests(item);
 }
 
-function printExportedSymbols(item: ImpactReportItem): void {
-    const symbols = item.analysis
-        ? buildExportedSymbolsView(item.analysis)
-        : [];
+function printExportedSymbols(item: ChangedFileReport): void {
+    const symbols: ExportedSymbolJson[] = item.exportedSymbols ?? [];
 
     console.log("");
     console.log(
@@ -220,23 +211,22 @@ function printExportedSymbols(item: ImpactReportItem): void {
             const isLast = index === symbols.length - 1;
             const prefix = isLast ? "└─" : "├─";
 
-            const wasModified =
-                item.modifiedSymbolNames?.has(sym.name) ?? false;
+            const wasModified = sym.modified;
 
-            const lineCount = item.modifiedSymbolLineCounts?.get(sym.name);
             const marker = wasModified
                 ? `${colors.yellow}✏️  `
                 : "";
 
             const suffix = wasModified
-                ? lineCount !== undefined && lineCount > 0
-                    ? ` ${colors.dim}(${lineCount} ${lineCount === 1 ? "line" : "lines"} modified)${colors.reset}`
+                ? sym.linesModified !== undefined && sym.linesModified > 0
+                    ? ` ${colors.dim}(${sym.linesModified} ${sym.linesModified === 1 ? "line" : "lines"} modified)${colors.reset}`
                     : ` ${colors.dim}(modified)${colors.reset}`
                 : "";
 
-            const modifiedMethods = wasModified && sym.kind === "class"
-                ? item.modifiedClassMethods?.get(sym.name)
-                : undefined;
+            const modifiedMethods =
+                wasModified && sym.kind === "class"
+                    ? sym.modifiedMethods
+                    : undefined;
 
             console.log(
                 `    ${colors.gray}│${colors.reset}    ` +
@@ -272,7 +262,7 @@ function printExportedSymbols(item: ImpactReportItem): void {
     }
 }
 
-function printDownstreamUsages(item: ImpactReportItem): void {
+function printDownstreamUsages(item: ChangedFileReport): void {
     console.log(
         `    ${colors.gray}│${colors.reset}`
     );
@@ -282,7 +272,14 @@ function printDownstreamUsages(item: ImpactReportItem): void {
         `${colors.bold}Detailed Downstream Usages${colors.reset}`
     );
 
-    if (item.symbolImpacts && item.symbolImpacts.length > 0) {
+    // The old data path only produced symbol impacts when at least one
+    // exported symbol was modified; the DTO encodes that same condition as
+    // a modified entry in exportedSymbols.
+    const hasSymbolImpacts =
+        (item.exportedSymbols ?? []).some(sym => sym.modified) ||
+        (item.consumers ?? []).length > 0;
+
+    if (hasSymbolImpacts) {
         const consumersByFile = new Map<
             string,
             {
@@ -292,21 +289,19 @@ function printDownstreamUsages(item: ImpactReportItem): void {
             }[]
         >();
 
-        for (const symImpact of item.symbolImpacts) {
-            for (const consumer of symImpact.consumers) {
-                // Omit pure import lines to avoid repetitive visual noise
-                if (isImportOnlyUsage(consumer.snippet)) {
-                    continue;
-                }
-
-                const usages = consumersByFile.get(consumer.filePath) ?? [];
-                usages.push({
-                    symbol: symImpact.symbolName,
-                    line: consumer.line,
-                    snippet: consumer.snippet
-                });
-                consumersByFile.set(consumer.filePath, usages);
+        for (const consumer of item.consumers ?? []) {
+            // Omit pure import lines to avoid repetitive visual noise
+            if (consumer.importOnly) {
+                continue;
             }
+
+            const usages = consumersByFile.get(consumer.filePath) ?? [];
+            usages.push({
+                symbol: consumer.symbol,
+                line: consumer.line,
+                snippet: consumer.snippet
+            });
+            consumersByFile.set(consumer.filePath, usages);
         }
 
         const entries = Array.from(consumersByFile.entries());
@@ -359,24 +354,24 @@ function printDownstreamUsages(item: ImpactReportItem): void {
     }
 }
 
-function printBlastRadius(item: ImpactReportItem): void {
+function printBlastRadius(item: ChangedFileReport): void {
     console.log(
         `    ${colors.gray}│${colors.reset}`
     );
 
     /*
-     * Keep the original dependency graph here because this section
-     * intentionally shows the static/potential dependency information.
+     * Keep the static dependency information here because this section
+     * intentionally shows the static/potential dependency picture.
      * Risk Assessment above is based on REAL symbol impacts only.
      */
     const dependents = item.dependents;
-    const transitive = item.transitiveImpact;
+    const transitive = item.transitive;
 
     if (dependents.length > 0) {
         // Always show the same format: direct/transitive/depth. When the
         // impact has no transitive reach, total equals direct and depth is 1.
         const reachSummary =
-            ` (${dependents.length} direct, ${transitive?.files.length ?? dependents.length} total, ` +
+            ` (${dependents.length} direct, ${transitive?.total ?? dependents.length} total, ` +
             `depth ${transitive?.maxDepth ?? 1})`;
 
         console.log(
@@ -386,10 +381,10 @@ function printBlastRadius(item: ImpactReportItem): void {
             `${colors.dim}${reachSummary}${colors.reset}`
         );
 
-        const depthMap = transitive?.depthMap;
+        const levels = transitive?.levels ?? [];
         const maxDepth = transitive?.maxDepth ?? 1;
 
-        if (!depthMap || maxDepth <= 1) {
+        if (!transitive || maxDepth <= 1 || levels.length === 0) {
             // Flat list: every dependent is a direct consumer
             dependents.forEach((dep, index) => {
                 const isLast = index === dependents.length - 1;
@@ -404,11 +399,8 @@ function printBlastRadius(item: ImpactReportItem): void {
         } else {
             // Cascade tree grouped by level: L1 imports the changed file,
             // L2 imports L1, and so on (§13 Level cascade)
-            for (let level = 1; level <= maxDepth; level++) {
-                const filesAtLevel = Array.from(depthMap.entries())
-                    .filter(([, depth]) => depth === level)
-                    .map(([file]) => file)
-                    .sort();
+            for (const { level, files } of levels) {
+                const filesAtLevel = files;
 
                 const isLastLevel = level === maxDepth;
                 const levelPrefix = isLastLevel ? "└─" : "├─";
@@ -442,7 +434,7 @@ function printBlastRadius(item: ImpactReportItem): void {
     }
 }
 
-function printRelatedTests(item: ImpactReportItem): void {
+function printRelatedTests(item: ChangedFileReport): void {
     console.log(
         `    ${colors.gray}│${colors.reset}`
     );
@@ -464,7 +456,7 @@ function printRelatedTests(item: ImpactReportItem): void {
                 `${colors.green}✓${colors.reset} ${colors.cyan}${testFile}${colors.reset}`
             );
         });
-    } else if (isTestFile(item.file.path)) {
+    } else if (isTestFile(item.path)) {
         // A test file is not a covered area: it does not need tests about
         // itself. Real relations (other tests importing it) are still shown.
         console.log(
@@ -477,36 +469,33 @@ function printRelatedTests(item: ImpactReportItem): void {
     }
 }
 
-function printSummary(
-    reportItems: ImpactReportItem[],
-    assessment: AssessmentResult,
-    testMapping?: TestMapping
-): void {
-    const { impactCoverage, riskAssessment, uniqueDependentFiles, testsOnAffected } = assessment;
+function printSummary(result: AnalysisResult): void {
+    const { impactCoverage, summary } = result;
+    const risk = result.risk;
 
-    const riskLevelText = `${riskStyles[riskAssessment.level].emoji} ${riskAssessment.level} RISK`;
+    const riskLevelText = `${riskStyles[risk.level].emoji} ${risk.level} RISK`;
 
     console.log("");
     boxTop("Analysis Summary", colors.cyan);
 
     console.log(
         `${colors.cyan}│${colors.reset} ` +
-        `Files analyzed       : ${colors.bold}${reportItems.length}${colors.reset}`
+        `Files analyzed       : ${colors.bold}${summary.filesAnalyzed}${colors.reset}`
     );
 
     console.log(
         `${colors.cyan}│${colors.reset} ` +
-        `Test files detected  : ${colors.bold}${testMapping?.testFiles.length ?? 0}${colors.reset}`
+        `Test files detected  : ${colors.bold}${summary.testFilesDetected}${colors.reset}`
     );
 
     console.log(
         `${colors.cyan}│${colors.reset} ` +
-        `Tests on affected    : ${colors.bold}${testsOnAffected}${colors.reset}`
+        `Tests on affected    : ${colors.bold}${summary.testsOnAffected}${colors.reset}`
     );
 
     console.log(
         `${colors.cyan}│${colors.reset} ` +
-        `Dependent files      : ${colors.bold}${uniqueDependentFiles}${colors.reset}`
+        `Dependent files      : ${colors.bold}${summary.dependentFiles}${colors.reset}`
     );
 
     console.log(
@@ -522,15 +511,15 @@ function printSummary(
     boxFooter(colors.cyan);
 }
 
-function printRecommendedAction(assessment: AssessmentResult): void {
-    const { uniqueDependentFiles, impactCoverage } = assessment;
+function printRecommendedAction(result: AnalysisResult): void {
+    const { impactCoverage, summary } = result;
 
     console.log("");
     console.log(
         ` ${colors.bold}💡 Recommended Action${colors.reset}`
     );
 
-    if (uniqueDependentFiles > 0) {
+    if (summary.dependentFiles > 0) {
         console.log(
             `    Run tests covering the dependent files listed above`
         );

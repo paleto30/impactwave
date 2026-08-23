@@ -46,6 +46,7 @@ npm run dev
 |---|---|
 | `-b, --base <branch>` | Rama base contra la que comparar. Si se omite, se autodetecta: `origin/HEAD` → `main`/`master` → `HEAD~1`. |
 | `--risk-weights <json>` | Ajustar los pesos de los factores de riesgo (ver [2.1. Pesos configurables del riesgo](#21-pesos-configurables-del-riesgo)). |
+| `--json` | Emitir el reporte como JSON a stdout (contrato versionado; ver [2.2. Salida JSON](#22-salida-json---json)). |
 
 ### 2.1 Pesos configurables del riesgo
 
@@ -81,6 +82,36 @@ impactwave --risk-weights '{"callerImpact":30,"affectedFiles":10,"dependencyDept
 # Solo interesan los consumidores (el resto de factores queda en 0):
 impactwave --risk-weights '{"callerImpact":100}'
 ```
+
+### 2.2 Salida JSON (`--json`)
+
+Para consumo por herramientas, scripts y pipelines de CI:
+
+```bash
+impactwave --json | jq '.risk'          # score, level y razones
+impactwave analyze --json -b main       # combinable con las demás opciones
+```
+
+- **stdout puro**: con `--json`, stdout contiene exactamente un documento
+  JSON (sin colores ni texto). Las advertencias siguen en `stderr`.
+- **Contrato versionado**: `meta.schemaVersion` identifica la versión del
+  contrato (`1` hoy). Dentro de una misma versión solo hay cambios
+  **aditivos** (campos nuevos); cualquier cambio que rompa compatibilidad
+  incrementa la versión.
+- **Esquema publicado**: [`docs/schema-v1.json`](schema-v1.json)
+  (JSON Schema draft 2020-12), validado contra la salida real en cada cambio.
+- **Datos crudos**: los usos de símbolos no se filtran — las conexiones que
+  son solo cableado de contrato (`import`, re-exports) viajan marcadas con
+  `importOnly: true` para que cada consumidor aplique su propia política.
+- Estructura del documento: `meta` (versiones, rama y base), `warnings`
+  (códigos estables), `summary`, `risk {score, level, reasons}`,
+  `impactCoverage` y `changedFiles[]` (símbolos exportados con marcas de
+  modificación, dependientes, blast radius por niveles, consumers y tests
+  relacionados).
+
+El mismo objeto está disponible programáticamente vía el facade
+`analyzeProject()` (`src/engine/analyze.ts`) para integrar ImpactWave en
+otras herramientas sin pasar por la CLI.
 
 ### Qué compara
 
@@ -241,11 +272,13 @@ Este bloque es informativo: el riesgo real NO se calcula sobre él, sino sobre l
 - La cobertura de tests se basa en imports **directos** de los archivos de test (no transitiva).
 - El grafo solo considera imports relativos (no `node_modules` ni path aliases no relativos).
 - La granularidad de "símbolo modificado" es la declaración top-level; dentro de clases, el reporte indica además los métodos públicos concretos modificados (los privados/protegidos no se reportan).
-- **En monorepos**: el análisis cubre siempre `<raíz>/src/**/*.ts`. Si el proyecto tiene código fuera de `src/` (ej. `packages/`, `app/`, tsconfigs por workspace), esos archivos no se cargan y sus símbolos no aparecen en el reporte. El soporte completo de monorepos (múltiples tsconfigs y directorios arbitrarios) está planificado en `ROADMAP.md` como mejora futura, fuera del alcance del MVP.
+- **Alcance del análisis**: el descubrimiento de fuentes recorre todo el árbol del repositorio (omit `node_modules`/`dist`/`build`, directorios ocultos, symlinks y rutas ilegibles) y añade todos los `.ts/.tsx`; el tsconfig raíz aporta solo sus `compilerOptions`, nunca su globbing de archivos. En monorepos con varios tsconfigs se usa únicamente el de la raíz.
 - **Directorios ilegibles**: carpetas sin permiso de lectura (ej. `pg_data` de Docker) se omiten del análisis en silencio; nunca abortan la ejecución.
 
 ## 6. Más información
 
 - [README.md](../README.md) — descripción general del proyecto (también en [English](../README.en.md)).
 - [GUIDE.en.md](GUIDE.en.md) — versión en inglés de esta guía.
+- [schema-v1.json](schema-v1.json) — esquema JSON del contrato de `--json`.
+- [CHANGELOG.md](../CHANGELOG.md) — historial de cambios por versión.
 - `test/fixtures/` — proyectos de ejemplo usados por la suite de tests (`npm test`).

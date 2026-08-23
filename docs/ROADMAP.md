@@ -1,69 +1,60 @@
-# Roadmap — Mejoras futuras
+# Roadmap
 
-Mejoras identificadas durante el desarrollo del MVP, ordenadas por valor.
-Ninguna está implementada todavía; son candidatas para la siguiente iteración.
+Criterio de foco: una mejora entra aquí solo si hace que el **núcleo de
+análisis** (símbolos modificados, consumidores, grafo, cobertura de impacto,
+score) sea más **correcto o más preciso** en proyectos TypeScript reales.
+Todo lo demás — superficies nuevas, comandos auxiliares, integraciones — se
+mantiene aparcado al final de este documento hasta que el núcleo sea
+confiable en los escenarios difíciles.
 
-## 1. Salida JSON y exit codes (`analyze --json`)
+## v1.2.0 — Precisión del núcleo
 
-**Estado: diseño discutido, sin implementar.**
+Cuatro huecos de precisión auditados contra el código actual (cada uno con
+test de regresión antes del fix):
 
-El reporte es hoy 100% consola (human-readable) y el exit code es siempre 0
-salvo errores de uso. Para consumo por herramientas/CI hace falta:
+1. **Imports dinámicos invisibles al grafo** — `import("./x")` y `require()`
+   no crean aristas; un cambio puede romper a un consumidor que el blast
+   radius no lista. Fix: extraer llamadas dinámicas además de declaraciones
+   estáticas (`src/engine/graph/dependency.ts`).
+2. **Cobertura de tests solo directa** — `getRelatedTests` mira imports
+   directos del archivo de test; si el test importa `A` y `A` importa `B`
+   modificado, la cobertura no cuenta. Fix: resolver transitivamente vía el
+   mismo grafo ya disponible (`src/engine/testing/test-mapping.ts`).
+3. **Filtro frágil de usos pasivos** — `isImportOnlyUsage` no reconoce
+   `export { X } from "./y"` como cableado de contrato y puede clasificarlo
+   como uso activo. Fix: cubrir re-exports y revisar heurística
+   (`src/engine/analyzer/usage-filter.ts`).
+4. **Los tests inflan el score** — un test que consume el símbolo modificado
+   suma como consumidor normal (`callerImpact`). Decisión: pesar los tests
+   por separado (factor propio opcional `testCallerImpact`, con migración de
+   pesos documentada) para no penalizar dos veces lo que es buena señal
+   (`src/engine/assessment.ts`).
 
-- `impactwave --json`: emitir el reporte (contexto git, risk
-  score con razones, impact coverage, ítems por archivo con consumers y
-  blast radius) como JSON a stdout.
-- Exit code condicional (`--fail-on HIGH|CRITICAL`): el proceso termina con
-  código distinto de 0 cuando el score supera el umbral.
+Además: corregir la documentación que aún describe el alcance del análisis
+como `<raíz>/src/**/*.ts` (el descubrimiento real recorre todo el árbol,
+omitiendo `node_modules`/`dist`/`build`, directorios ocultos, symlinks y
+rutas ilegibles).
 
-**Por qué es el primero:** abre el caso de uso DevOps/CI (gate de merges),
-que es el mayor valor pendiente de la herramienta.
+## Aparcado (superficie, no núcleo)
 
-## 2. Comando `check` (gate de CI)
+Estos elementos aportan valor pero no mejoran la precisión del análisis;
+se retoman cuando el núcleo pase la auditoría de v1.2.0:
 
-**Estado: propuesto.**
+- **`check` (gate de CI)** — envoltorio no interactivo con exit code según
+  umbral (`--fail-on HIGH|CRITICAL`). Hoy se aproxima con
+  `impactwave analyze --json | jq -e '.risk.level == "LOW"'`.
+- **`init` + archivo de configuración** (`.impactwaverc`: pesos, rama base,
+  patrones de test) — estandarización por equipo.
+- **`doctor`** — diagnóstico de entorno (repo, base resoluble, parseos
+  omitidos, timings por fase).
+- **`--head <ref>`** — comparar entre dos refs arbitrarios (hoy siempre
+  `base..HEAD`).
+- Rendimiento en monorepos grandes (caché incremental sobre `findReferences`).
 
-Envoltorio no interactivo del análisis pensado para CI: misma lógica que
-`analyze`, pero sin reporte completo — solo el nivel/score y el exit code
-según umbral (`--fail-on`). Complementa al punto 1: donde `--json` es para
-máquinas que leen, `check` es para pipelines que deciden.
+## Entregado
 
-## 3. Comando `init` + archivo de configuración
-
-**Estado: propuesto.**
-
-Generar un `.impactwaverc` con la configuración del proyecto:
-
-- pesos de `--risk-weights` (hoy solo por flag)
-- rama base por defecto
-- patrones de archivos de test (hoy fijos: `*.test.ts`, `*.spec.ts`)
-
-**Valor:** estandarizar la configuración por equipo (mismo score para
-todos) y reducir flags repetitivos. Es requisito previo natural de una
-adopción más amplia.
-
-## 4. Comando `doctor` (diagnóstico)
-
-**Estado: propuesto.**
-
-Verificación de entorno para troubleshooting sin leer un reporte completo:
-
-- ¿es un repo git? ¿la rama base resuelve?
-- cuántos archivos parseados, cuántos tests detectados
-- timing por fase (parseo, análisis de símbolos, grafo)
-- errores de parseo silenciados (hoy se cuentan como `skippedFiles`)
-
-**Cuándo:** cuando aparezcan los primeros reportes de CI "raros" que pidan
-verificar el setup.
-
-## 5. Otros candidatos menores
-
-- `--head <ref>` en `analyze`: analizar entre dos refs arbitrarios (hoy el
-  rango es siempre `<base>..HEAD`).
-- Publicación a npm (el `bin` ya apunta a `dist/cli.js`; falta `publish` +
-  sección de CI en README).
-- Validación de rendimiento en monorepos grandes (`findReferences` de
-  ts-morph es la operación más cara; posible caché incremental).
-- Posible mejora futura de reporting (fuera de este roadmap): nota neutra
-  para archivos de producción sin exports (ej. entry points como
-  `src/cli.ts`), análoga al issue #5 de `ai-docs/fixes.md`.
+- **v1.1.0**: salida JSON con contrato versionado (`meta.schemaVersion`),
+  `analyzeProject()` programático, capa de output desacoplada, golden file
+  de consola byte a byte y esquema publicado (`docs/schema-v1.json`).
+- **v1.0.x**: descubrimiento resiliente de fuentes (directorios hostiles,
+  tsconfig sin `include`, opciones heredadas), publicación en npm.

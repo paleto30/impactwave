@@ -1,0 +1,71 @@
+
+[36m╭──────────────────────────────────────────────────────────╮[0m
+[36m│[0m [1m🌊 IMPACTWAVE — BLAST RADIUS REPORT[0m
+[36m╰──────────────────────────────────────────────────────────╯[0m
+
+ [1m📂 Git Context[0m
+    [90m├─ Branch     :[0m [1mmain[0m
+    [90m└─ Comparing  :[0m [1mHEAD vs HEAD~1[0m
+
+[2mℹ️  What is this? This report evaluates the downstream impact[0m
+[2m   of your changes before merging or pushing code.[0m
+
+[33m╭─ Risk Assessment ────────────────────────────────────────╮[0m
+[33m│[0m 🟡 MEDIUM RISK [2m(score: 28/100)[0m
+[33m│[0m
+[33m│[0m [90mChanges affect a few dependent modules. Verify them before proceeding.[0m
+[33m│[0m [90m1 unique dependent file at risk[0m
+[33m│[0m
+[33m│[0m [1mReasons:[0m
+[33m│[0m   [90m•[0m 1 consumer of modified symbols [2m(3 pts)[0m
+[33m│[0m   [90m•[0m 1 affected files (transitive reach) [2m(1 pts)[0m
+[33m│[0m   [90m•[0m Impact reaches depth 1 dependency level [2m(4 pts)[0m
+[33m│[0m   [90m•[0m 1 affected area without detected tests [2m(20 pts)[0m
+[33m│[0m   [90m•[0m 3 lines modified
+[33m╰──────────────────────────────────────────────────────────╯[0m
+
+[34m╭─ Impact Coverage ────────────────────────────────────────╮[0m
+[34m│[0m Affected components : [1m1[0m
+[34m│[0m Covered             : [32m[1m0[0m
+[34m│[0m Uncovered           : [31m[1m1[0m
+[34m│[0m Impact coverage     : [1m0%[0m
+[34m│[0m
+[34m│[0m [31m[1mUncovered:[0m (The affected files without tests — are exactly what you should test.)
+[34m│[0m   [90m✗[0m [36mA.ts[0m
+[34m╰──────────────────────────────────────────────────────────╯[0m
+
+[36m╭──────────────────────────────────────────────────────────╮[0m
+[36m│[0m [1m📄 [[34mMODIFIED[0m[1m] B.ts[0m
+[36m╰──────────────────────────────────────────────────────────╯[0m
+
+    [90m├─[0m [1mExported symbols[0m
+    [90m│[0m    [90m└─[0m [33m✏️  [1mb[0m [2m(function)[0m [2m(3 lines modified)[0m
+    [90m│[0m
+    [90m├─[0m [1mDetailed Downstream Usages[0m
+    [90m│[0m    [90m└─[0m 📂 Affected File: [36m[1mA.ts[0m
+    [90m│[0m         [90m└─[0m 🔸 Target Symbol: [1mb[0m (Line [36m4[0m)
+    [90m│[0m                [90m💻 Code snippet : "[0m[34mreturn b() + 1;[0m[90m"[0m
+    [90m│[0m
+    [90m├─[0m [1mFiles in blast radius[0m [2m(imported by ↓)[0m[2m (1 direct, 1 total, depth 1)[0m
+    [90m│[0m    [90m└─[0m [36mA.ts[0m
+    [90m│[0m
+    [90m└─[0m [1mRelated Tests[0m
+         [90m└─ [31m✗ No test covers this file[0m
+
+[36m╭─ Analysis Summary ───────────────────────────────────────╮[0m
+[36m│[0m Files analyzed       : [1m1[0m
+[36m│[0m Test files detected  : [1m0[0m
+[36m│[0m Tests on affected    : [1m0[0m
+[36m│[0m Dependent files      : [1m1[0m
+[36m│[0m Risk level           : 🟡 MEDIUM RISK
+[36m│[0m Impact coverage      : [1m0%[0m
+[36m╰──────────────────────────────────────────────────────────╯[0m
+
+ [1m💡 Recommended Action[0m
+    Run tests covering the dependent files listed above
+    to ensure no unexpected regressions were introduced.
+
+    [31m[1m⚠️  These affected areas have no detected tests:[0m
+    [90m├─[0m [36mA.ts[0m
+    [90m└─[0m Consider adding tests before merging.
+

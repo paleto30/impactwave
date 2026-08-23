@@ -2,8 +2,10 @@ import { simpleGit, type SimpleGit } from "simple-git";
 import { FileStatus } from "./file-status.js";
 import type { ChangedFile } from "./changed-file.interface.js";
 
-export async function detectRepo(): Promise<SimpleGit | null> {
-    const git: SimpleGit = simpleGit(process.cwd());
+export async function detectRepo(
+    projectRoot: string = process.cwd()
+): Promise<SimpleGit | null> {
+    const git: SimpleGit = simpleGit(projectRoot);
 
     const isRepo = await git.checkIsRepo();
 

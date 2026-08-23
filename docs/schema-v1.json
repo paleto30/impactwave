@@ -1,0 +1,219 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/paleto30/impactwave/master/docs/schema-v1.json",
+  "title": "ImpactWave analysis report (impactwave analyze --json)",
+  "description": "Machine-readable contract of ImpactWave's --json output. Within schemaVersion 1 only additive changes are allowed; breaking changes bump meta.schemaVersion.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "meta",
+    "warnings",
+    "summary",
+    "risk",
+    "impactCoverage",
+    "changedFiles"
+  ],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "schemaVersion", "branch", "base"],
+      "properties": {
+        "version": { "type": "string", "description": "npm package version that produced this result" },
+        "schemaVersion": { "const": 1 },
+        "branch": { "type": "string" },
+        "base": { "type": "string", "description": "resolved base branch or ref HEAD was compared against" }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "base-branch-fallback",
+              "unsupported-tsconfig-option"
+            ],
+            "description": "Stable machine-readable identifier"
+          },
+          "message": { "type": "string" }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "filesAnalyzed",
+        "testFilesDetected",
+        "testsOnAffected",
+        "dependentFiles",
+        "skippedFiles"
+      ],
+      "properties": {
+        "filesAnalyzed": { "type": "integer", "minimum": 0 },
+        "testFilesDetected": { "type": "integer", "minimum": 0 },
+        "testsOnAffected": { "type": "integer", "minimum": 0 },
+        "dependentFiles": { "type": "integer", "minimum": 0 },
+        "skippedFiles": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["score", "level", "reasons"],
+      "properties": {
+        "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "level": { "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label", "points"],
+            "properties": {
+              "label": { "type": "string" },
+              "points": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "impactCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "affected",
+        "covered",
+        "uncovered",
+        "uncoveredFiles",
+        "percentage"
+      ],
+      "properties": {
+        "affected": { "type": "integer", "minimum": 0 },
+        "covered": { "type": "integer", "minimum": 0 },
+        "uncovered": { "type": "integer", "minimum": 0 },
+        "uncoveredFiles": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "percentage": {
+          "type": "number",
+          "description": "0-100 coverage percentage; meaningless when affected is 0"
+        }
+      }
+    },
+    "changedFiles": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/changedFileReport" }
+    }
+  },
+  "$defs": {
+    "exportedSymbol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind", "modified"],
+      "properties": {
+        "name": { "type": "string" },
+        "kind": {
+          "enum": ["function", "class", "interface", "type", "enum", "variable"]
+        },
+        "methodCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Class symbols only: total declared methods"
+        },
+        "modified": { "type": "boolean" },
+        "linesModified": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Present only when at least one modified line falls inside the symbol"
+        },
+        "modifiedMethods": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Public methods modified, class symbols only"
+        }
+      }
+    },
+    "consumerUsage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["symbol", "filePath", "line", "snippet", "importOnly"],
+      "properties": {
+        "symbol": {
+          "type": "string",
+          "description": "Modified symbol; methods are qualified as Class.method"
+        },
+        "filePath": { "type": "string" },
+        "line": { "type": "integer", "minimum": 1 },
+        "snippet": { "type": "string" },
+        "importOnly": {
+          "type": "boolean",
+          "description": "True when the usage is contract wiring (import/export-from) rather than active execution. Raw data: never filtered out."
+        }
+      }
+    },
+    "changedFileReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "status", "dependents", "transitive", "relatedTests"],
+      "properties": {
+        "path": { "type": "string" },
+        "status": { "enum": ["added", "modified", "deleted"] },
+        "exportedSymbols": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/exportedSymbol" },
+          "description": "Present only when the file could be parsed"
+        },
+        "dependents": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Files importing this one (static graph)"
+        },
+        "transitive": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total", "maxDepth", "levels"],
+          "properties": {
+            "total": { "type": "integer", "minimum": 0 },
+            "maxDepth": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Import-hop distance to the furthest dependent; 0 when nothing imports the file"
+            },
+            "levels": {
+              "type": "array",
+              "description": "Reachable dependents grouped by import-hop distance",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["level", "files"],
+                "properties": {
+                  "level": { "type": "integer", "minimum": 1 },
+                  "files": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "consumers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/consumerUsage" },
+          "description": "Real consumers of modified symbols, unfiltered (see importOnly flag)"
+        },
+        "relatedTests": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}
