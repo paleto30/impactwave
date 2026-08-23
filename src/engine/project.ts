@@ -1,7 +1,8 @@
 import path from "node:path";
 import { existsSync } from "node:fs";
-import { Project } from "ts-morph";
+import { Project, type CompilerOptions } from "ts-morph";
 import { addProjectSourceFiles } from "./project-files.js";
+import { readTsConfigCompilerOptions } from "./tsconfig-compiler-options.js";
 
 let sharedProject: Project | undefined;
 let sharedProjectRoot: string | undefined;
@@ -13,11 +14,11 @@ let sharedProjectRoot: string | undefined;
  * tsconfig settings (path aliases, target/module), avoiding parsing the same
  * files multiple times with different projects.
  *
- * A root tsconfig.json is optional: monorepo workspaces usually have one
- * tsconfig per package and none at the root. Either way, source files are
- * discovered by an explicit resilient walk (see project-files) instead of
- * letting TypeScript enumerate the tree — unreadable directories like
- * Docker data folders must not crash the analysis.
+ * A root tsconfig.json contributes ONLY compilerOptions (read manually, see
+ * tsconfig-compiler-options): source files are always discovered by an
+ * explicit resilient walk (see project-files) instead of letting TypeScript
+ * enumerate the tree — unreadable directories like Docker data folders must
+ * not crash the analysis, so include/exclude are intentionally not honored.
  */
 export function getProject(projectRoot: string): Project {
     if (!sharedProject || sharedProjectRoot !== projectRoot) {
@@ -25,8 +26,11 @@ export function getProject(projectRoot: string): Project {
 
         sharedProject = existsSync(tsconfigPath)
             ? new Project({
-                tsConfigFilePath: tsconfigPath,
-                skipAddingFilesFromTsConfig: true
+                // raw JSON values (string enums, arrays) are valid here and
+                // avoid any TypeScript-side filesystem enumeration
+                compilerOptions: readTsConfigCompilerOptions(
+                    tsconfigPath
+                ) as CompilerOptions
             })
             : new Project();
 

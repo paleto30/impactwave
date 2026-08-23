@@ -27,7 +27,7 @@ Para ello combina:
 ### Requisitos
 
 - Un repositorio Git local (la herramienta se ejecuta dentro de él).
-- Proyecto TypeScript/JavaScript. El `tsconfig.json` en la raíz es opcional: si no existe (típico en monorepos), la herramienta hace *fallback* al escaneo de `src/**/*.ts`.
+- Proyecto TypeScript/JavaScript. El `tsconfig.json` en la raíz es opcional: si existe, aporta solo sus `compilerOptions` (aliases de rutas, decorators, target...). El descubrimiento de archivos siempre usa un recorrido propio que omite en silencio directorios sin permiso de lectura (ej. el `pg_data` de Docker); los campos `include`/`exclude` del tsconfig no se usan para el escaneo.
 
 ### Ejecución
 

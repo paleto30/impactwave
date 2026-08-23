@@ -27,7 +27,7 @@ To do so it combines:
 ### Requirements
 
 - A local Git repository (the tool runs inside it).
-- A TypeScript/JavaScript project. A root `tsconfig.json` is optional: when missing (common in monorepos), `src/**/*.ts` is scanned.
+- A TypeScript/JavaScript project. A root `tsconfig.json` is optional: when present, it contributes only `compilerOptions` (path aliases, decorators, target...). File discovery always uses our own walk, which silently skips directories without read permission (e.g. Docker's `pg_data`); the tsconfig `include`/`exclude` fields are not used for scanning.
 
 ### Running
 
