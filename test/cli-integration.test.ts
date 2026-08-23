@@ -187,7 +187,8 @@ describe("CLI integration: modified class methods", () => {
 
         const output = result.stdout;
         assert.match(output, /Calculadora \(class.*modified\)/);
-        assert.match(output, /\(suma method modified\)/);
+        assert.match(output, /└─ ✏️\s+suma method modified/);
+        assert.doesNotMatch(output, /\(suma method modified\)/);
     });
 
     it("does not report private methods as modified", () => {

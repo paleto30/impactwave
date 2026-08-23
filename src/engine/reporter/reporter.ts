@@ -238,18 +238,31 @@ function printExportedSymbols(item: ImpactReportItem): void {
                 ? item.modifiedClassMethods?.get(sym.name)
                 : undefined;
 
-            const methodSuffix = modifiedMethods && modifiedMethods.length > 0
-                ? ` ${colors.yellow}(${modifiedMethods.join(", ")} ${modifiedMethods.length === 1 ? "method" : "methods"} modified)${colors.reset}`
-                : "";
-
             console.log(
                 `    ${colors.gray}│${colors.reset}    ` +
                 `${colors.gray}${prefix}${colors.reset} ` +
                 `${marker}${colors.bold}${sym.name}${colors.reset} ` +
                 `${colors.dim}(${formatSymbolKind(sym)})${colors.reset}` +
-                suffix +
-                methodSuffix
+                suffix
             );
+
+            // Modified public methods render as a subtree of their class,
+            // keeping the class line itself free of extra parentheses.
+            if (modifiedMethods && modifiedMethods.length > 0) {
+                modifiedMethods.forEach((methodName, methodIndex) => {
+                    const isLastMethod =
+                        methodIndex === modifiedMethods.length - 1;
+                    const methodBranch = isLastMethod ? "└─" : "├─";
+
+                    console.log(
+                        `    ${colors.gray}│${colors.reset}          ` +
+                        `${colors.gray}${methodBranch}${colors.reset} ` +
+                        `${colors.yellow}✏️  ${colors.reset}` +
+                        `${colors.bold}${methodName}${colors.reset} ` +
+                        `${colors.dim}method modified${colors.reset}`
+                    );
+                });
+            }
         });
     } else {
         console.log(
