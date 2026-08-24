@@ -7,6 +7,7 @@ const SIMPLE = path.resolve("test/fixtures/simple-project");
 const COVERAGE = path.resolve("test/fixtures/test-coverage");
 const CIRCULAR = path.resolve("test/fixtures/circular-dependencies");
 const BARREL = path.resolve("test/fixtures/barrel-exports");
+const DYNAMIC = path.resolve("test/fixtures/dynamic-imports");
 
 describe("dependency graph", () => {
     it("builds the A -> B -> C chain", () => {
@@ -80,5 +81,74 @@ describe("transitive dependents", () => {
         assert.equal(impact.maxDepth, 1);
 
         assert.deepEqual(findTransitiveDependents(graph, "Y.ts").files, ["X.ts"]);
+    });
+});
+
+describe("dynamic imports", () => {
+    it("creates an edge for await import(\"./x\")", () => {
+        const graph = buildDependencyGraph(DYNAMIC);
+        assert.ok(
+            graph.dependents.get("c.ts")?.includes("consumer-import.ts"),
+            "consumer-import.ts dynamically imports c.ts"
+        );
+    });
+
+    it("creates an edge for a conditional require(\"./x\")", () => {
+        const graph = buildDependencyGraph(DYNAMIC);
+        assert.ok(
+            graph.dependents.get("b.ts")?.includes("consumer-require.ts"),
+            "consumer-require.ts requires b.ts inside a conditional branch"
+        );
+    });
+
+    it("creates an edge for import(\"./x\").then(...)", () => {
+        const graph = buildDependencyGraph(DYNAMIC);
+        assert.ok(graph.dependents.get("e.ts")?.includes("consumer-then.ts"));
+    });
+
+    it("creates an edge for require.resolve(\"./x\")", () => {
+        const graph = buildDependencyGraph(DYNAMIC);
+        assert.ok(graph.dependents.get("e.ts")?.includes("consumer-resolve.ts"));
+    });
+
+    it("resolves substitution-free template literals", () => {
+        const graph = buildDependencyGraph(DYNAMIC);
+        assert.ok(graph.dependents.get("b.ts")?.includes("consumer-template.ts"));
+    });
+
+    it("includes dynamic consumers in the transitive blast radius", () => {
+        const graph = buildDependencyGraph(DYNAMIC);
+
+        for (const changed of ["b.ts", "c.ts"]) {
+            const impact = findTransitiveDependents(graph, changed);
+            assert.ok(
+                impact.files.length > 0,
+                `${changed} must have transitive dependents via dynamic imports`
+            );
+        }
+    });
+
+    it("records unresolvable dynamic arguments instead of dropping them silently", () => {
+        const graph = buildDependencyGraph(DYNAMIC);
+        // Two template literals with substitutions + one concatenation;
+        // the bare package specifier ("lodash-es") is external policy, not unresolved
+        assert.equal(graph.unresolvedDynamicImports.get("consumer-unresolved.ts"), 3);
+    });
+
+    it("ignores bare (package) dynamic specifiers like static imports do", () => {
+        const graph = buildDependencyGraph(DYNAMIC);
+        assert.equal(graph.unresolvedDynamicImports.get("consumer-import.ts"), undefined);
+    });
+
+    it("terminates on cycles that mix dynamic and static edges", () => {
+        const graph = buildDependencyGraph(DYNAMIC);
+
+        const fromB = findTransitiveDependents(graph, "cycle-b.ts");
+        assert.deepEqual(fromB.files, ["cycle-a.ts"]);
+        assert.equal(fromB.maxDepth, 1);
+
+        const fromA = findTransitiveDependents(graph, "cycle-a.ts");
+        assert.deepEqual(fromA.files, ["cycle-b.ts"]);
+        assert.equal(fromA.maxDepth, 1);
     });
 });
