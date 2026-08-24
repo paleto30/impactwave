@@ -244,6 +244,70 @@ export function buildDependencyGraph(projectRoot: string): DependencyGraph {
 }
 
 /**
+ * Options for graph traversals.
+ */
+export interface TransitiveTraversalOptions {
+    /**
+     * Stop expanding beyond this many hops from the source. Undefined means
+     * unbounded. The visited set still protects against cycles either way.
+     */
+    maxDepth?: number;
+}
+
+/**
+ * Generic single-source transitive closure over the dependency graph,
+ * direction-parameterized so every consumer reuses ONE traversal
+ * implementation (with cycle protection) instead of rolling its own:
+ *
+ * - "dependents": who is affected by `sourceFile` (reverse edges)
+ * - "imports":    what does the file reach (forward edges), e.g. which
+ *                 production code a test file exercises
+ *
+ * BFS by levels, so `maxDepth` prunes expansion exactly at the boundary;
+ * complexity is O(V_reachable + E_reachable) within the depth budget.
+ */
+export function findTransitiveFiles(
+    graph: DependencyGraph,
+    sourceFile: string,
+    direction: "dependents" | "imports",
+    options?: TransitiveTraversalOptions
+): TransitiveImpact {
+    const maxDepthLimit = options?.maxDepth;
+
+    const visited = new Set<string>([sourceFile]);
+    const depthMap = new Map<string, number>();
+    let maxDepth = 0;
+
+    let queue: string[] = [sourceFile];
+    let level = 0;
+
+    while (queue.length > 0 && (maxDepthLimit === undefined || level < maxDepthLimit)) {
+        const next: string[] = [];
+
+        for (const file of queue) {
+            const parentDepth = depthMap.get(file) ?? 0;
+
+            for (const neighbor of graph[direction].get(file) ?? []) {
+                if (visited.has(neighbor)) continue;
+
+                visited.add(neighbor);
+                const depth = parentDepth + 1;
+                depthMap.set(neighbor, depth);
+                maxDepth = Math.max(maxDepth, depth);
+                next.push(neighbor);
+            }
+        }
+
+        queue = next;
+        level++;
+    }
+
+    const files = Array.from(visited).filter(f => f !== sourceFile);
+
+    return { files, maxDepth, depthMap };
+}
+
+/**
  * Traverses the transitive dependents graph (BFS) from a source file to
  * answer "what does A affect?" (§13 of the original document).
  *
@@ -257,33 +321,5 @@ export function findTransitiveDependents(
     graph: DependencyGraph,
     sourceFile: string
 ): TransitiveImpact {
-    const visited = new Set<string>([sourceFile]);
-    const depthMap = new Map<string, number>();
-    let maxDepth = 0;
-
-    let queue: string[] = [sourceFile];
-
-    while (queue.length > 0) {
-        const next: string[] = [];
-
-        for (const file of queue) {
-            const parentDepth = depthMap.get(file) ?? 0;
-
-            for (const dependent of graph.dependents.get(file) ?? []) {
-                if (visited.has(dependent)) continue;
-
-                visited.add(dependent);
-                const depth = parentDepth + 1;
-                depthMap.set(dependent, depth);
-                maxDepth = Math.max(maxDepth, depth);
-                next.push(dependent);
-            }
-        }
-
-        queue = next;
-    }
-
-    const files = Array.from(visited).filter(f => f !== sourceFile);
-
-    return { files, maxDepth, depthMap };
+    return findTransitiveFiles(graph, sourceFile, "dependents");
 }

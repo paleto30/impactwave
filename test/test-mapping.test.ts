@@ -4,9 +4,11 @@ import path from "node:path";
 import { buildTestMapping, getRelatedTests, isTestFile } from "../src/engine/testing/test-mapping.js";
 import { computeImpactCoverage } from "../src/engine/testing/impact-coverage.js";
 import { analyzeFile } from "../src/engine/parser/parser.js";
+import { buildDependencyGraph } from "../src/engine/graph/dependency.js";
 
 const COVERAGE = path.resolve("test/fixtures/test-coverage");
 const SIMPLE = path.resolve("test/fixtures/simple-project");
+const TRANSITIVE = path.resolve("test/fixtures/test-coverage-transitive");
 
 describe("test mapping", () => {
     it("detects test files by name", () => {
@@ -113,5 +115,68 @@ describe("test mapping", () => {
         );
 
         assert.equal(coverage.affected, 0, "plain constants are not testable areas");
+    });
+});
+
+describe("transitive test coverage", () => {
+    // chain.test.ts imports m0; m0 -> m1 -> m2 -> m3 -> m4 -> m5.
+    // Hop distance from the test: m0=1, m1=2 ... m5=6.
+    it("covers files reached transitively through the dependency graph", () => {
+        const mapping = buildTestMapping(TRANSITIVE);
+
+        for (const file of ["m0.ts", "m1.ts", "m2.ts", "m3.ts"]) {
+            assert.ok(
+                getRelatedTests(mapping, file).includes("chain.test.ts"),
+                `${file} is within the coverage depth and must be covered`
+            );
+        }
+    });
+
+    it("stops claiming coverage beyond the default depth cap", () => {
+        // m4 (hop 5) and m5 (hop 6) exceed DEFAULT_TEST_COVERAGE_DEPTH = 4:
+        // a test importing the root of a long barrel chain must not claim
+        // to cover the whole codebase.
+        const mapping = buildTestMapping(TRANSITIVE);
+
+        assert.deepEqual(getRelatedTests(mapping, "m4.ts"), []);
+        assert.deepEqual(getRelatedTests(mapping, "m5.ts"), []);
+    });
+
+    it("honors a configurable depth limit", () => {
+        const deep = buildTestMapping(TRANSITIVE, undefined, 6);
+        assert.deepEqual(
+            getRelatedTests(deep, "m5.ts"),
+            ["chain.test.ts"],
+            "with maxDepth 6 the whole chain is reachable"
+        );
+    });
+
+    it("terminates and stays correct on import cycles", () => {
+        const mapping = buildTestMapping(TRANSITIVE);
+
+        assert.ok(getRelatedTests(mapping, "p.ts").includes("cycle.test.ts"));
+        assert.ok(getRelatedTests(mapping, "q.ts").includes("cycle.test.ts"));
+    });
+
+    it("counts coverage through dynamic imports in test files", () => {
+        const mapping = buildTestMapping(TRANSITIVE);
+
+        assert.ok(
+            getRelatedTests(mapping, "helper.ts").includes("dyn.test.ts"),
+            "the dynamic edge test -> helper is part of the graph"
+        );
+        assert.ok(
+            getRelatedTests(mapping, "target.ts").includes("dyn.test.ts"),
+            "target is reached statically from helper"
+        );
+    });
+
+    it("keeps direct-only mappings when reusing an externally built graph", () => {
+        // analyze.ts builds one graph and passes it in; this guards the
+        // explicit-graph path against silently rebuilding something else.
+        const graph = buildDependencyGraph(TRANSITIVE);
+        const mapping = buildTestMapping(TRANSITIVE, graph);
+
+        assert.ok(getRelatedTests(mapping, "m3.ts").includes("chain.test.ts"));
     });
 });
