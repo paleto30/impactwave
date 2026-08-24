@@ -157,6 +157,14 @@ Every analysis prints Git context, a risk assessment with score and reasons, imp
 
 📖 **How to read the full report, section by section** → [docs/GUIDE.en.md](docs/GUIDE.en.md)
 
+### Visual example
+
+A real ImpactWave run before merging to `main`: impact analysis of a users-module refactor in a NestJS project.
+
+![Impact analysis before merge: users-module refactor in a NestJS project](docs/impactwave.png)
+
+> **Note**: this capture was taken during development with a utility that saves the full terminal output as an image, so part of the report's design and formatting is lost. It does not exactly represent the final report — it is just a visual example of pre-merge impact analysis; the real report renders directly in your terminal.
+
 ### JSON output for CI
 
 `impactwave analyze --json` emits the same report as a single JSON document
