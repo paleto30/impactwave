@@ -19,7 +19,7 @@ To do so it combines:
 - **Symbol analysis**: determines which exported functions/classes/interfaces/types/constants were **physically** modified (intersection of AST line ranges with the diff). Arrow functions assigned to `export const` count as functions.
 - **Real consumers**: finds the active usages of each modified symbol (pure `import` lines do NOT count as impact).
 - **Dependency graph**: which files import which files, directly and transitively.
-- **Test mapping**: detects test files (`*.test.ts`, `*.spec.ts`) and which code they cover.
+- **Test mapping**: detects test files (`*.test.ts`, `*.spec.ts`) and which code they cover, transitively through the dependency graph (up to 4 hops by default).
 - **Risk engine**: a deterministic 0-100 score with explainable reasons.
 
 ## 2. How to use it

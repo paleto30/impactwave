@@ -177,7 +177,7 @@ contrato (`import`, re-exports).
 ## Limitaciones conocidas
 
 - Compara commits; los cambios sin commitear en el working tree no se analizan.
-- La cobertura de tests se basa en imports directos de los archivos de test (no transitiva).
+- La cobertura de tests es transitiva: un test cubre los archivos que alcanza a través del grafo de dependencias hasta 4 saltos (`DEFAULT_TEST_COVERAGE_DEPTH`, configurable por llamada), evitando que un test que importa la raíz del proyecto reclame cobertura sobre todo el codebase.
 - El grafo solo considera imports relativos (no `node_modules` ni path aliases).
 - En monorepos con varios tsconfigs, solo se usa el de la raíz; el descubrimiento de fuentes recorre todo el árbol (omitiendo `node_modules`/`dist`/`build`, ocultos y rutas ilegibles).
 - Los directorios sin permiso de lectura (ej. `pg_data`) se omiten; no abortan el análisis.
