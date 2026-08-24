@@ -59,6 +59,35 @@ Aplican a todo cambio de código, sin excepción:
 - El dominio y la aplicación no conocen frameworks, transportes ni infraestructura.
 - Adaptadores en los bordes traducen entre el mundo externo y el núcleo.
 
+### Organización de archivos
+
+- Un archivo, una responsabilidad clara e identificable por su nombre
+  (`user.interface.ts`, `user.service.ts`, `user.constants.ts`); preferir
+  nombres específicos sobre genéricos (`utils.ts`, `helpers.ts`, `types.ts`)
+  siempre que exista uno.
+- Archivos pequeños y enfocados: no mezclar abstracciones o responsabilidades
+  distintas solo para reducir el número de archivos. Mantener juntos
+  únicamente lo que comparte la misma responsabilidad.
+
+## Principios del producto
+
+Guían todo cambio de comportamiento del motor:
+
+- **Primero evidencia, después interpretación**: el motor descubre relaciones
+  reales (AST, imports, llamadas, Git, tests); las heurísticas van después.
+  Nada de "adivinar" qué puede romperse ni análisis basados principalmente en regex.
+- **Determinismo**: la misma entrada produce siempre el mismo reporte y score.
+- **Explicabilidad**: cada conclusión del reporte debe rastrearse hasta evidencia
+  encontrada en el código.
+- **Offline-first / privacy by design**: el análisis básico corre localmente;
+  el código del usuario nunca se envía a servicios externos.
+- **Modularidad y extensibilidad**: git, parser, graph, risk, testing y reporting
+  son componentes independientes; el diseño debe permitir nuevos lenguajes e
+  interfaces sin reescribir el núcleo.
+- **Alcance disciplinado**: una funcionalidad completa y comprobable por vez,
+  sin ampliar alcance innecesariamente ni introducir IA/LLM mientras el análisis
+  estático siga siendo la base del producto.
+
 ## Flujo de Git (OBLIGATORIO)
 
 Reglas completas en [`ai-docs/git-workflow-opencode.md`](ai-docs/git-workflow-opencode.md). Resumen vinculante:
@@ -92,6 +121,9 @@ Los `.md` de `ai-docs/` pueden ser **reglas vivas** o **specs de tarea**:
 2. Barrido semanal de seguridad: eliminar cualquier spec ya ejecutado que siga en `ai-docs/`.
 3. Antes de borrar un spec, promover a este archivo cualquier decisión o convención permanente que contenga.
 4. Un spec vivo en `ai-docs/` significa "tarea pendiente o en curso".
+
+Los `.md` de agentes son project-owned y se versionan; el estado local de
+agentes (`.opencode/`, sesiones, caches, logs) jamás se commitea.
 
 ## Arquitectura
 
