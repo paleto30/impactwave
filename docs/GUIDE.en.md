@@ -19,7 +19,7 @@ To do so it combines:
 - **Symbol analysis**: determines which exported functions/classes/interfaces/types/constants were **physically** modified (intersection of AST line ranges with the diff). Arrow functions assigned to `export const` count as functions.
 - **Real consumers**: finds the active usages of each modified symbol (pure `import` lines do NOT count as impact).
 - **Dependency graph**: which files import which files, directly and transitively.
-- **Test mapping**: detects test files (`*.test.ts`, `*.spec.ts`) and which code they cover.
+- **Test mapping**: detects test files (`*.test.ts`, `*.spec.ts`) and which code they cover, transitively through the dependency graph (up to 4 hops by default).
 - **Risk engine**: a deterministic 0-100 score with explainable reasons.
 
 ## 2. How to use it
@@ -268,7 +268,7 @@ This block is informational: real risk is NOT computed from it, but from real sy
 
 - Compares commits; **uncommitted** working tree changes are not analyzed.
 - Test coverage is based on **direct** imports of test files (not transitive).
-- The graph only considers relative imports (no `node_modules` nor non-relative path aliases).
+- The graph only considers relative imports (no `node_modules` nor non-relative path aliases), both static and dynamic (`import(...)`/`require(...)`/`require.resolve(...)`). Non-static arguments (template literals with variables, concatenation) cannot be resolved: they are recorded and surfaced through the `unresolved-dynamic-imports` warning instead of being silently dropped.
 - "Modified symbol" granularity is the top-level declaration; within classes, the report also lists the concrete modified public methods (private/protected ones are not reported).
 - **Analysis scope**: source discovery walks the whole repository tree (skipping `node_modules`/`dist`/`build`, hidden directories, symlinks and unreadable paths) and adds every `.ts/.tsx`; the root tsconfig contributes only its `compilerOptions`, never its file globbing. In monorepos with several tsconfigs, only the root one is used.
 - **Unreadable directories**: folders without read permission (e.g. Docker's `pg_data`) are silently skipped; they never abort the analysis.

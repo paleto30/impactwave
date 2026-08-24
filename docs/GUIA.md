@@ -19,7 +19,7 @@ Para ello combina:
 - **Análisis de símbolos**: determina qué funciones/clases/interfaces/tipos/constantes exportados se modificaron **físicamente** (intersección de rangos de líneas del AST con el diff). Las funciones flecha asignadas a `export const` cuentan como funciones.
 - **Consumidores reales**: encuentra los usos activos de cada símbolo modificado (los `import` puros NO cuentan como impacto).
 - **Grafo de dependencias**: qué archivos importan a qué archivos, directa y transitivamente.
-- **Test mapping**: detecta archivos de test (`*.test.ts`, `*.spec.ts`) y qué código cubren.
+- **Test mapping**: detecta archivos de test (`*.test.ts`, `*.spec.ts`) y qué código cubren, de forma transitiva a través del grafo de dependencias (hasta 4 saltos por defecto).
 - **Risk engine**: un score determinístico 0-100 con razones explicables.
 
 ## 2. Cómo se usa
@@ -270,7 +270,7 @@ Este bloque es informativo: el riesgo real NO se calcula sobre él, sino sobre l
 
 - Compara commits; los cambios **sin commitear** en el working tree no se analizan.
 - La cobertura de tests se basa en imports **directos** de los archivos de test (no transitiva).
-- El grafo solo considera imports relativos (no `node_modules` ni path aliases no relativos).
+- El grafo solo considera imports relativos (no `node_modules` ni path aliases no relativos), tanto estáticos como dinámicos (`import(...)`/`require(...)`/`require.resolve(...)`). Los argumentos no estáticos (template literals con variables, concatenaciones) no son resolubles: se registran y se emite la advertencia `unresolved-dynamic-imports` en lugar de omitirse en silencio.
 - La granularidad de "símbolo modificado" es la declaración top-level; dentro de clases, el reporte indica además los métodos públicos concretos modificados (los privados/protegidos no se reportan).
 - **Alcance del análisis**: el descubrimiento de fuentes recorre todo el árbol del repositorio (omit `node_modules`/`dist`/`build`, directorios ocultos, symlinks y rutas ilegibles) y añade todos los `.ts/.tsx`; el tsconfig raíz aporta solo sus `compilerOptions`, nunca su globbing de archivos. En monorepos con varios tsconfigs se usa únicamente el de la raíz.
 - **Directorios ilegibles**: carpetas sin permiso de lectura (ej. `pg_data` de Docker) se omiten del análisis en silencio; nunca abortan la ejecución.

@@ -1,6 +1,29 @@
 import path from "node:path";
 import { getProject } from "../project.js";
+import { findTransitiveFiles } from "../graph/dependency.js";
+import type { DependencyGraph } from "../graph/dependency-graph.interface.js";
+import { buildDependencyGraph } from "../graph/dependency.js";
 import type { TestMapping } from "./test-mapping.interface.js";
+
+/**
+ * Maximum import-hop distance credited as test coverage.
+ *
+ * Why a binary cutoff (and why 4):
+ * - Symmetry with the risk engine: DEPENDENCY_DEPTH_THRESHOLD = 4 already
+ *   saturates risk by dependency depth — reach beyond 4 hops adds no risk
+ *   points, so it must not add coverage credit either.
+ * - In layered projects, real execution paths rarely exceed a handful of
+ *   hops; beyond that, reachability is dominated by barrel/index chains,
+ *   where one root-importing test would claim to cover the whole codebase
+ *   (the false positive this cap exists to prevent).
+ * - Weighted decay was considered and rejected: every downstream metric
+ *   (coverage %, uncovered counts feeding testGaps) needs binary
+ *   membership, so decay would only add fuzziness without removing the
+ *   need for a threshold.
+ *
+ * Configurable per call site for teams with deeper coupling conventions.
+ */
+export const DEFAULT_TEST_COVERAGE_DEPTH = 4;
 
 /**
  * Determines whether a path corresponds to a test file (name-based).
@@ -12,10 +35,20 @@ export function isTestFile(filePath: string): boolean {
 /**
  * Builds the mapping test -> covered code.
  *
- * A test file "covers" a production file if it imports it directly
- * (relative imports). Transitive coverage is not considered in the MVP.
+ * A test file "covers" a production file when the file is reachable from
+ * the test through the shared dependency graph within
+ * DEFAULT_TEST_COVERAGE_DEPTH hops (configurable). The graph's forward
+ * edges include dynamic loads, so tests exercising modules via
+ * `await import(...)` are mapped too. Transitive coverage reuses the ONE
+ * graph traversal (findTransitiveFiles) instead of duplicating logic;
+ * its visited set makes cycles harmless.
  */
-export function buildTestMapping(projectRoot: string): TestMapping {
+export function buildTestMapping(
+    projectRoot: string,
+    graph?: DependencyGraph,
+    maxDepth: number = DEFAULT_TEST_COVERAGE_DEPTH
+): TestMapping {
+    const dependencyGraph = graph ?? buildDependencyGraph(projectRoot);
     const project = getProject(projectRoot);
     const coverage = new Map<string, string[]>();
     const testFiles: string[] = [];
@@ -26,17 +59,14 @@ export function buildTestMapping(projectRoot: string): TestMapping {
 
         testFiles.push(filePath);
 
-        for (const importDecl of sourceFile.getImportDeclarations()) {
-            const moduleSpecifier = importDecl.getModuleSpecifierValue();
-            if (!moduleSpecifier.startsWith(".")) continue;
+        const reachable = findTransitiveFiles(dependencyGraph, filePath, "imports", {
+            maxDepth
+        });
 
-            const importedSourceFile = importDecl.getModuleSpecifierSourceFile();
-            if (!importedSourceFile) continue;
-
-            const importedPath = path.relative(projectRoot, importedSourceFile.getFilePath());
-            const list = coverage.get(importedPath) ?? [];
+        for (const coveredFile of reachable.files) {
+            const list = coverage.get(coveredFile) ?? [];
             if (!list.includes(filePath)) list.push(filePath);
-            coverage.set(importedPath, list);
+            coverage.set(coveredFile, list);
         }
     }
 
@@ -44,7 +74,9 @@ export function buildTestMapping(projectRoot: string): TestMapping {
 }
 
 /**
- * Returns the test files that directly cover a file.
+ * Returns the test files that cover a file: directly importing it or
+ * reaching it transitively through the dependency graph within the
+ * configured depth.
  */
 export function getRelatedTests(mapping: TestMapping, filePath: string): string[] {
     return mapping.coverage.get(filePath) ?? [];

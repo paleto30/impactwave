@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`testCallerImpact` risk weight** (optional, via `--risk-weights`): test
+  files consuming a modified symbol no longer have to count inside
+  `callerImpact`. When the key is absent, scoring is byte-identical to
+  previous behavior; when present, production consumers saturate
+  `callerImpact` and test consumers saturate `testCallerImpact`
+  (`points = min(P/10,1)·w.callerImpact + min(T/10,1)·w.testCallerImpact`).
+  An explicit `0` exempts tests from the score.
+
+  Measured on this repository analyzing its own v1.2 work
+  (`analyze -b master`, 5 production + 2 test consumers):
+
+  | config                       | score | level  |
+  |------------------------------|-------|--------|
+  | default (legacy, tests in callerImpact) | 56    | HIGH   |
+  | `"testCallerImpact":15`      | 53    | HIGH   |
+  | `"testCallerImpact":0`       | 50    | MEDIUM |
+
+### Changed
+
+- `--risk-weights` accepts the new optional key `testCallerImpact`;
+  validation lists it among valid keys.
+
+### Fixed
+
+- **Dynamic imports are no longer invisible to the dependency graph**:
+  `import("./x")`, `require("./x")` and `require.resolve("./x")` with a
+  static string argument (string literals and substitution-free template
+  literals) now create graph edges, so consumers reachable only through a
+  dynamic load appear in the blast radius. Arguments that cannot be
+  resolved statically (template literals with variables, concatenation)
+  are counted per file and reported through the new
+  `unresolved-dynamic-imports` warning (additive to JSON schema v1)
+  instead of being silently dropped.
+- **Test coverage is now transitive**: a test covers not only the files it
+  imports directly but everything it reaches through the dependency graph
+  within `DEFAULT_TEST_COVERAGE_DEPTH` (4) hops. The cap mirrors the risk
+  engine's depth threshold so one root-importing test cannot claim to
+  cover the whole codebase; the limit is configurable per call.
+- Coverage now also flows through dynamic loads: tests exercising a module
+  via `await import(...)` are mapped too (reuses the graph built once per
+  analysis).
+- **Re-export wiring no longer counts as active usage**: `isImportOnlyUsage`
+  now classifies `export { X } from "./y"` (including renamed, `default`,
+  `export * from` and `export * as NS` forms) and bare `export { X }` lists
+  as passive contract wiring, matching what it already did for import
+  declarations. Barrel pass-throughs stop inflating the blast radius.
+  Dynamic calls on the line (`import("./x")`) and exports whose initializer
+  uses the symbol (`export default build(X)`) remain active usages.
+
 ## [1.1.0] - 2026-08-23
 
 ### Added

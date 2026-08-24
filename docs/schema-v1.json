@@ -36,7 +36,8 @@
             "type": "string",
             "enum": [
               "base-branch-fallback",
-              "unsupported-tsconfig-option"
+              "unsupported-tsconfig-option",
+              "unresolved-dynamic-imports"
             ],
             "description": "Stable machine-readable identifier"
           },

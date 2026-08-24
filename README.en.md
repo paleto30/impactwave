@@ -115,7 +115,7 @@ impactwave analyze --json -b main | jq -e '.risk.level | inside("LOW|MEDIUM")' >
 2. **AST**: ts-morph extracts exports and imports of changed files, using a single project built from your root `tsconfig.json`'s `compilerOptions` plus files discovered by its own tree walk (tolerant of unreadable directories).
 3. **Modified symbols**: intersects each exported symbol's line range with the diff lines.
 4. **Real consumers**: `findReferences` finds the active usages of each symbol (pure imports don't count as impact).
-5. **Dependency graph**: reverse and forward indexes of relative imports + transitive traversal (BFS) with depth.
+5. **Dependency graph**: reverse and forward indexes of relative imports —including dynamic `import(...)`/`require(...)` loads with a static argument— + transitive traversal (BFS) with depth.
 6. **Test mapping**: detects `*.test.ts`/`*.spec.ts` files and maps which code they cover.
 7. **Risk engine**: deterministic 0-100 score with explainable reasons.
 
@@ -177,7 +177,7 @@ contract wiring (`import`, re-exports).
 ## Known limitations
 
 - Compares commits; uncommitted working-tree changes are not analyzed.
-- Test coverage relies on direct imports from test files (not transitive).
+- Test coverage is transitive: a test covers the files it reaches through the dependency graph within 4 hops (`DEFAULT_TEST_COVERAGE_DEPTH`, configurable per call), preventing a root-importing test from claiming coverage over the whole codebase.
 - The graph only considers relative imports (no `node_modules` or path aliases).
 - In monorepos with several tsconfigs, only the root one is used; source discovery walks the whole tree (skipping `node_modules`/`dist`/`build`, hidden and unreadable paths).
 
