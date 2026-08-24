@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Re-export wiring no longer counts as active usage**: `isImportOnlyUsage`
+  now classifies `export { X } from "./y"` (including renamed, `default`,
+  `export * from` and `export * as NS` forms) and bare `export { X }` lists
+  as passive contract wiring, matching what it already did for import
+  declarations. Barrel pass-throughs stop inflating the blast radius.
+  Dynamic calls on the line (`import("./x")`) and exports whose initializer
+  uses the symbol (`export default build(X)`) remain active usages.
+
 ## [1.1.0] - 2026-08-23
 
 ### Added
