@@ -157,6 +157,14 @@ Cada análisis imprime contexto Git, evaluación de riesgo con score y razones, 
 
 📖 **Cómo leer el reporte completo, sección por sección** → [docs/GUIA.md](docs/GUIA.md)
 
+### Ejemplo visual
+
+Ejecución real de ImpactWave antes de hacer merge a `main`: análisis del refactor de un módulo de usuarios en un proyecto NestJS.
+
+![Análisis de impacto antes de merge: refactor del módulo de usuarios en un proyecto NestJS](docs/impactwave.png)
+
+> **Nota**: esta captura se tomó durante el desarrollo de la herramienta con una utilidad que guarda la salida completa de la terminal como imagen, por lo que pierde parte del diseño y formato del reporte. No representa exactamente el reporte final — es solo un ejemplo visual del análisis de impacto antes del merge; el reporte real se renderiza directamente en tu terminal.
+
 ### Salida JSON para CI
 
 `impactwave analyze --json` emite el mismo reporte como un único documento
