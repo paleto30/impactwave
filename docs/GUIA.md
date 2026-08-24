@@ -19,7 +19,7 @@ Para ello combina:
 - **Análisis de símbolos**: determina qué funciones/clases/interfaces/tipos/constantes exportados se modificaron **físicamente** (intersección de rangos de líneas del AST con el diff). Las funciones flecha asignadas a `export const` cuentan como funciones.
 - **Consumidores reales**: encuentra los usos activos de cada símbolo modificado (los `import` puros NO cuentan como impacto).
 - **Grafo de dependencias**: qué archivos importan a qué archivos, directa y transitivamente.
-- **Test mapping**: detecta archivos de test (`*.test.ts`, `*.spec.ts`) y qué código cubren.
+- **Test mapping**: detecta archivos de test (`*.test.ts`, `*.spec.ts`) y qué código cubren, de forma transitiva a través del grafo de dependencias (hasta 4 saltos por defecto).
 - **Risk engine**: un score determinístico 0-100 con razones explicables.
 
 ## 2. Cómo se usa

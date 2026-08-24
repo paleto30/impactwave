@@ -18,6 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are counted per file and reported through the new
   `unresolved-dynamic-imports` warning (additive to JSON schema v1)
   instead of being silently dropped.
+- **Test coverage is now transitive**: a test covers not only the files it
+  imports directly but everything it reaches through the dependency graph
+  within `DEFAULT_TEST_COVERAGE_DEPTH` (4) hops. The cap mirrors the risk
+  engine's depth threshold so one root-importing test cannot claim to
+  cover the whole codebase; the limit is configurable per call.
+- Coverage now also flows through dynamic loads: tests exercising a module
+  via `await import(...)` are mapped too (reuses the graph built once per
+  analysis).
 
 ## [1.1.0] - 2026-08-23
 

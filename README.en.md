@@ -177,7 +177,7 @@ contract wiring (`import`, re-exports).
 ## Known limitations
 
 - Compares commits; uncommitted working-tree changes are not analyzed.
-- Test coverage relies on direct imports from test files (not transitive).
+- Test coverage is transitive: a test covers the files it reaches through the dependency graph within 4 hops (`DEFAULT_TEST_COVERAGE_DEPTH`, configurable per call), preventing a root-importing test from claiming coverage over the whole codebase.
 - The graph only considers relative imports (no `node_modules` or path aliases).
 - In monorepos with several tsconfigs, only the root one is used; source discovery walks the whole tree (skipping `node_modules`/`dist`/`build`, hidden and unreadable paths).
 

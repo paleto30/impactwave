@@ -375,10 +375,11 @@ export async function analyzeProject(options: AnalyzeOptions): Promise<AnalysisR
     const { analyses, changedFileAnalyses, skippedFiles } =
         await collectChangedFileAnalyses(git, baseBranch, changedFiles, symbolAnalyzer, projectRoot);
 
-    // 5. Build the dependency graph and the test mapping
+    // 5. Build the dependency graph and the test mapping (the mapping
+    // reuses the same graph for its transitive coverage closure)
     const graph = buildDependencyGraph(projectRoot);
     warnUnresolvedDynamicImports(graph.unresolvedDynamicImports, emitWarning);
-    const testMapping = buildTestMapping(projectRoot);
+    const testMapping = buildTestMapping(projectRoot, graph);
 
     // 6. Build the report items and link the per-file analysis data
     const reportItems = generateReport(changedFiles, analyses, graph);
