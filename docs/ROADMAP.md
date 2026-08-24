@@ -7,34 +7,6 @@ Todo lo demás — superficies nuevas, comandos auxiliares, integraciones — se
 mantiene aparcado al final de este documento hasta que el núcleo sea
 confiable en los escenarios difíciles.
 
-## v1.2.0 — Precisión del núcleo
-
-Cuatro huecos de precisión auditados contra el código actual (cada uno con
-test de regresión antes del fix):
-
-1. **Imports dinámicos invisibles al grafo** — `import("./x")` y `require()`
-   no crean aristas; un cambio puede romper a un consumidor que el blast
-   radius no lista. Fix: extraer llamadas dinámicas además de declaraciones
-   estáticas (`src/engine/graph/dependency.ts`).
-2. **Cobertura de tests solo directa** — `getRelatedTests` mira imports
-   directos del archivo de test; si el test importa `A` y `A` importa `B`
-   modificado, la cobertura no cuenta. Fix: resolver transitivamente vía el
-   mismo grafo ya disponible (`src/engine/testing/test-mapping.ts`).
-3. **Filtro frágil de usos pasivos** — `isImportOnlyUsage` no reconoce
-   `export { X } from "./y"` como cableado de contrato y puede clasificarlo
-   como uso activo. Fix: cubrir re-exports y revisar heurística
-   (`src/engine/analyzer/usage-filter.ts`).
-4. **Los tests inflan el score** — un test que consume el símbolo modificado
-   suma como consumidor normal (`callerImpact`). Decisión: pesar los tests
-   por separado (factor propio opcional `testCallerImpact`, con migración de
-   pesos documentada) para no penalizar dos veces lo que es buena señal
-   (`src/engine/assessment.ts`).
-
-Además: corregir la documentación que aún describe el alcance del análisis
-como `<raíz>/src/**/*.ts` (el descubrimiento real recorre todo el árbol,
-omitiendo `node_modules`/`dist`/`build`, directorios ocultos, symlinks y
-rutas ilegibles).
-
 ## Aparcado (superficie, no núcleo)
 
 Estos elementos aportan valor pero no mejoran la precisión del análisis;
@@ -52,6 +24,14 @@ se retoman cuando el núcleo pase la auditoría de v1.2.0:
 - Rendimiento en monorepos grandes (caché incremental sobre `findReferences`).
 
 ## Entregado
+
+- **v1.2.0**: precisión del núcleo — imports dinámicos (`import()`/`require()`
+  con argumento estático) crean aristas en el grafo y lo no resoluble se
+  reporta con warning; cobertura de tests transitiva vía grafo con tope de
+  profundidad (4 saltos, configurable); re-exports (`export { X } from`,
+  `export *`) clasificados como cableado pasivo; peso opcional
+  `testCallerImpact` para no inflar el score con tests. Documentación del
+  alcance de descubrimiento corregida (symlinks no se siguen).
 
 - **v1.1.0**: salida JSON con contrato versionado (`meta.schemaVersion`),
   `analyzeProject()` programático, capa de output desacoplada, golden file
