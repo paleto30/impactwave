@@ -115,7 +115,7 @@ impactwave analyze --json -b main | jq -e '.risk.level | inside("LOW|MEDIUM")' >
 2. **AST**: ts-morph extracts exports and imports of changed files, using a single project built from your root `tsconfig.json`'s `compilerOptions` plus files discovered by its own tree walk (tolerant of unreadable directories).
 3. **Modified symbols**: intersects each exported symbol's line range with the diff lines.
 4. **Real consumers**: `findReferences` finds the active usages of each symbol (pure imports don't count as impact).
-5. **Dependency graph**: reverse and forward indexes of relative imports + transitive traversal (BFS) with depth.
+5. **Dependency graph**: reverse and forward indexes of relative imports —including dynamic `import(...)`/`require(...)` loads with a static argument— + transitive traversal (BFS) with depth.
 6. **Test mapping**: detects `*.test.ts`/`*.spec.ts` files and maps which code they cover.
 7. **Risk engine**: deterministic 0-100 score with explainable reasons.
 
