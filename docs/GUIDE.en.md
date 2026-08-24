@@ -268,7 +268,7 @@ This block is informational: real risk is NOT computed from it, but from real sy
 
 - Compares commits; **uncommitted** working tree changes are not analyzed.
 - Test coverage is based on **direct** imports of test files (not transitive).
-- The graph only considers relative imports (no `node_modules` nor non-relative path aliases), both static and dynamic (`import(...)`/`require(...)`/`require.resolve(...)`). Non-static arguments (template literals with variables, concatenation) cannot be resolved: they are recorded and surfaced through the `unresolved-dynamic-imports` warning instead of being silently dropped.
+- The graph only considers relative imports (no `node_modules` nor non-relative path aliases).
 - "Modified symbol" granularity is the top-level declaration; within classes, the report also lists the concrete modified public methods (private/protected ones are not reported).
 - **Analysis scope**: source discovery walks the whole repository tree (skipping `node_modules`/`dist`/`build`, hidden directories, symlinks and unreadable paths) and adds every `.ts/.tsx`; the root tsconfig contributes only its `compilerOptions`, never its file globbing. In monorepos with several tsconfigs, only the root one is used.
 - **Unreadable directories**: folders without read permission (e.g. Docker's `pg_data`) are silently skipped; they never abort the analysis.
