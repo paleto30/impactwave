@@ -16,7 +16,16 @@ export function classifyRisk(score: number): RiskLevel {
  * reference threshold, capped by its weight. Weights are configurable and
  * must add up to 100.
  *
- *   - callerImpact: direct consumers of modified symbols (threshold 10)
+ *   - callerImpact: direct consumers of modified symbols (threshold 10).
+ *     Legacy mode: test files count as consumers. Split mode (only when
+ *     testCallerImpact is configured): callerImpact counts production
+ *     consumers only, and test consumers saturate their own
+ *     testCallerImpact weight with the same threshold.
+ *
+ *       legacy:  points = min(C / 10, 1) · w.callerImpact          (C = P + T)
+ *       split:   points = min(P / 10, 1) · w.callerImpact
+ *                       + min(T / 10, 1) · w.testCallerImpact
+ *
  *   - affectedFiles: transitively reached files (threshold 15)
  *   - dependencyDepth: maximum impact depth levels (threshold 4)
  *   - testGaps: share of affected areas without tests
@@ -26,24 +35,51 @@ export function evaluateRisk(
     factors: RiskFactors,
     weights: RiskWeights = DEFAULT_RISK_WEIGHTS
 ): RiskAssessment {
-    // Sanitize: partial weights (configured via JSON) are filled with 0
+    // Sanitize: partial weights (configured via JSON) are filled with 0.
+    // testCallerImpact keeps undefined when absent: that absence IS the
+    // legacy-mode signal, an explicit 0 is a deliberate exemption.
     const w = {
         callerImpact: weights.callerImpact ?? 0,
         affectedFiles: weights.affectedFiles ?? 0,
         dependencyDepth: weights.dependencyDepth ?? 0,
         testGaps: weights.testGaps ?? 0,
-        changeSize: weights.changeSize ?? 0
+        changeSize: weights.changeSize ?? 0,
+        ...(weights.testCallerImpact !== undefined
+            ? { testCallerImpact: weights.testCallerImpact }
+            : {})
     };
 
     const reasons: RiskReason[] = [];
 
+    const splitTestCallers = w.testCallerImpact !== undefined;
+    const testConsumers = Math.min(factors.testConsumers ?? 0, factors.uniqueConsumers);
+    const callerBasis = splitTestCallers
+        ? factors.uniqueConsumers - testConsumers
+        : factors.uniqueConsumers;
+
     const callerImpact =
-        Math.min(factors.uniqueConsumers / CALLER_IMPACT_THRESHOLD, 1) * w.callerImpact;
-    if (factors.uniqueConsumers > 0) {
+        Math.min(callerBasis / CALLER_IMPACT_THRESHOLD, 1) * w.callerImpact;
+    if (factors.uniqueConsumers > 0 && !splitTestCallers) {
         reasons.push({
             label: `${factors.uniqueConsumers} consumer${factors.uniqueConsumers === 1 ? "" : "s"} of modified symbols`,
             points: Math.round(callerImpact)
         });
+    } else if (callerBasis > 0 || testConsumers > 0) {
+        if (callerBasis > 0) {
+            reasons.push({
+                label:
+                    `${callerBasis} production consumer${callerBasis === 1 ? "" : "s"} of modified symbols`,
+                points: Math.round(callerImpact)
+            });
+        }
+        if (testConsumers > 0) {
+            const testCallerPoints =
+                Math.min(testConsumers / CALLER_IMPACT_THRESHOLD, 1) * (w.testCallerImpact ?? 0);
+            reasons.push({
+                label: `${testConsumers} test consumer${testConsumers === 1 ? "" : "s"} of modified symbols`,
+                points: Math.round(testCallerPoints)
+            });
+        }
     }
 
     const affectedFiles =
@@ -88,7 +124,17 @@ export function evaluateRisk(
 
     const score = Math.min(
         MAX_SCORE,
-        Math.round(callerImpact + affectedFiles + dependencyDepth + testGaps + changeSize)
+        Math.round(
+            callerImpact +
+            affectedFiles +
+            dependencyDepth +
+            testGaps +
+            changeSize +
+            (splitTestCallers
+                ? Math.min(testConsumers / CALLER_IMPACT_THRESHOLD, 1) *
+                  (w.testCallerImpact ?? 0)
+                : 0)
+        )
     );
 
     return { score, level: classifyRisk(score), reasons };
