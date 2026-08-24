@@ -7,18 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- **Dynamic imports are no longer invisible to the dependency graph**:
-  `import("./x")`, `require("./x")` and `require.resolve("./x")` with a
-  static string argument (string literals and substitution-free template
-  literals) now create graph edges, so consumers reachable only through a
-  dynamic load appear in the blast radius. Arguments that cannot be
-  resolved statically (template literals with variables, concatenation)
-  are counted per file and reported through the new
-  `unresolved-dynamic-imports` warning (additive to JSON schema v1)
-  instead of being silently dropped.
-
 ## [1.1.0] - 2026-08-23
 
 ### Added
