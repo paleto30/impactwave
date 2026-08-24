@@ -8,13 +8,15 @@ export const DEFAULT_RISK_WEIGHTS: RiskWeights = {
     changeSize: 15
 };
 
-// Valid keys for --risk-weights
+// Valid keys for --risk-weights. testCallerImpact is optional: when it is
+// not configured, scoring stays bit-compatible with the pre-split behavior.
 export const RISK_WEIGHT_KEYS = [
     "callerImpact",
     "affectedFiles",
     "dependencyDepth",
     "testGaps",
-    "changeSize"
+    "changeSize",
+    "testCallerImpact"
 ] as const;
 
 // Saturation thresholds for each factor (proportional scoring)

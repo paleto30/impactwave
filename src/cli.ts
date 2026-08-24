@@ -53,7 +53,9 @@ program
     .option(
         "--risk-weights <json>",
         'JSON object with custom risk factor weights; omitted keys count as 0. ' +
-        "Valid keys: callerImpact, affectedFiles, dependencyDepth, testGaps, changeSize. " +
+        "Valid keys: callerImpact, affectedFiles, dependencyDepth, testGaps, changeSize, " +
+        "testCallerImpact (optional: when set, tests stop counting inside callerImpact " +
+        "and saturate this weight instead; 0 exempts them from the score). " +
         'Defaults: {"callerImpact":30, "affectedFiles":20, "dependencyDepth":15, "testGaps":20, "changeSize":15}'
     )
     .addHelpText("after", `

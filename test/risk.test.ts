@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { classifyRisk, evaluateRisk } from "../src/engine/risk/risk.js";
+import { parseRiskWeights } from "../src/engine/risk/risk.weights.js";
 
 const zeroFactors = {
     uniqueConsumers: 0,
@@ -85,5 +86,74 @@ describe("risk evaluation", () => {
             changedLines: 10000
         });
         assert.ok(assessment.score <= 100);
+    });
+});
+
+describe("testCallerImpact factor", () => {
+    it("keeps the legacy score when testCallerImpact is not configured", () => {
+        // 1 production + 2 test consumers = 3 total, weight 30,
+        // threshold 10 -> min(3/10,1)*30 = 9 points (exactly pre-fix)
+        const legacy = evaluateRisk(
+            { ...zeroFactors, uniqueConsumers: 3, testConsumers: 2 },
+            { callerImpact: 30, affectedFiles: 0, dependencyDepth: 0, testGaps: 0, changeSize: 0 }
+        );
+        const noTestField = evaluateRisk(
+            { ...zeroFactors, uniqueConsumers: 3 },
+            { callerImpact: 30, affectedFiles: 0, dependencyDepth: 0, testGaps: 0, changeSize: 0 }
+        );
+        assert.equal(legacy.score, 9);
+        assert.equal(noTestField.score, 9);
+        assert.ok(legacy.reasons.some(r => r.label === "3 consumers of modified symbols"),
+            "legacy mode keeps the historical reason label");
+    });
+
+    it("splits production and test consumers when configured", () => {
+        // callerImpact 30 on 1 production consumer -> 3 points;
+        // testCallerImpact 15 on 2 test consumers -> round(min(2/10,1)*15)=3
+        const assessment = evaluateRisk(
+            { ...zeroFactors, uniqueConsumers: 3, testConsumers: 2 },
+            {
+                callerImpact: 30,
+                affectedFiles: 0,
+                dependencyDepth: 0,
+                testGaps: 0,
+                changeSize: 0,
+                testCallerImpact: 15
+            }
+        );
+        assert.equal(assessment.score, 6);
+        assert.ok(assessment.reasons.some(r =>
+            r.label === "1 production consumer of modified symbols" && r.points === 3
+        ));
+        assert.ok(assessment.reasons.some(r =>
+            r.label === "2 test consumers of modified symbols" && r.points === 3
+        ));
+    });
+
+    it("lets testCallerImpact: 0 fully exempt tests from the score", () => {
+        const assessment = evaluateRisk(
+            { ...zeroFactors, uniqueConsumers: 3, testConsumers: 2 },
+            {
+                callerImpact: 30,
+                affectedFiles: 0,
+                dependencyDepth: 0,
+                testGaps: 0,
+                changeSize: 0,
+                testCallerImpact: 0
+            }
+        );
+        assert.equal(assessment.score, 3);
+        // Consistent with every other zero-weighted factor: the reason
+        // stays visible for explainability, contributing 0 points.
+        const testReason = assessment.reasons.find(r =>
+            r.label === "2 test consumers of modified symbols"
+        );
+        assert.ok(testReason);
+        assert.equal(testReason.points, 0);
+    });
+
+    it("accepts testCallerImpact as a --risk-weights key", () => {
+        const parsed = parseRiskWeights('{"testCallerImpact": 15}');
+        assert.equal(parsed.ok, true);
     });
 });

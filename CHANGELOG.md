@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`testCallerImpact` risk weight** (optional, via `--risk-weights`): test
+  files consuming a modified symbol no longer have to count inside
+  `callerImpact`. When the key is absent, scoring is byte-identical to
+  previous behavior; when present, production consumers saturate
+  `callerImpact` and test consumers saturate `testCallerImpact`
+  (`points = min(P/10,1)·w.callerImpact + min(T/10,1)·w.testCallerImpact`).
+  An explicit `0` exempts tests from the score.
+
+  Measured on this repository analyzing its own v1.2 work
+  (`analyze -b master`, 5 production + 2 test consumers):
+
+  | config                       | score | level  |
+  |------------------------------|-------|--------|
+  | default (legacy, tests in callerImpact) | 56    | HIGH   |
+  | `"testCallerImpact":15`      | 53    | HIGH   |
+  | `"testCallerImpact":0`       | 50    | MEDIUM |
+
+### Changed
+
+- `--risk-weights` accepts the new optional key `testCallerImpact`;
+  validation lists it among valid keys.
+
 ### Fixed
 
 - **Dynamic imports are no longer invisible to the dependency graph**:

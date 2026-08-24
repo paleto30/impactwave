@@ -53,6 +53,7 @@ export function computeAssessment(
     projectRoot: string = process.cwd()
 ): AssessmentResult {
     const uniqueImpactedFiles = new Set<string>();
+    const testConsumerFiles = new Set<string>();
 
     for (const item of reportItems) {
         for (const symbolImpact of item.symbolImpacts ?? []) {
@@ -61,6 +62,14 @@ export function computeAssessment(
                     continue;
                 }
                 uniqueImpactedFiles.add(consumer.filePath);
+                // Tests are instruments, not blast radius: when the score
+                // runs in split mode (testCallerImpact configured) they
+                // saturate their own weight instead of callerImpact. In
+                // legacy mode this set is ignored and behavior is
+                // identical to counting everything as callers.
+                if (isTestFile(consumer.filePath)) {
+                    testConsumerFiles.add(consumer.filePath);
+                }
             }
         }
     }
@@ -108,6 +117,7 @@ export function computeAssessment(
 
     const riskAssessment = evaluateRisk({
         uniqueConsumers: uniqueImpactedFiles.size,
+        testConsumers: testConsumerFiles.size,
         transitiveFiles: transitiveFiles.size,
         maxDepth,
         affectedComponents: impactCoverage.affected,
