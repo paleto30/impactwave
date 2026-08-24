@@ -115,7 +115,7 @@ impactwave analyze --json -b main | jq -e '.risk.level | inside("LOW|MEDIUM")' >
 2. **AST**: ts-morph extrae exports e imports de los archivos cambiados, usando un único proyecto con los `compilerOptions` de tu `tsconfig.json` raíz y los archivos descubiertos por un recorrido propio del árbol (tolerante a directorios ilegibles).
 3. **Símbolos modificados**: intersecta los rangos de líneas de cada símbolo exportado con las líneas del diff.
 4. **Consumidores reales**: `findReferences` encuentra los usos activos de cada símbolo (los imports puros no cuentan como impacto).
-5. **Grafo de dependencias**: índice inverso y directo de imports relativos + recorrido transitivo (BFS) con profundidad.
+5. **Grafo de dependencias**: índice inverso y directo de imports relativos —incluidas las cargas dinámicas `import(...)`/`require(...)` con argumento estático— + recorrido transitivo (BFS) con profundidad.
 6. **Test mapping**: detecta archivos `*.test.ts`/`*.spec.ts` y mapea qué código cubren.
 7. **Risk engine**: score determinístico 0-100 con razones explicables.
 
@@ -178,7 +178,7 @@ contrato (`import`, re-exports).
 
 - Compara commits; los cambios sin commitear en el working tree no se analizan.
 - La cobertura de tests se basa en imports directos de los archivos de test (no transitiva).
-- El grafo solo considera imports relativos (no `node_modules` ni path aliases).
+- El grafo solo considera imports relativos (no `node_modules` ni path aliases), estáticos o dinámicos (`import(...)`/`require(...)` con argumento no estático quedan registrados como advertencia `unresolved-dynamic-imports`).
 - En monorepos con varios tsconfigs, solo se usa el de la raíz; el descubrimiento de fuentes recorre todo el árbol (omitiendo `node_modules`/`dist`/`build`, ocultos y rutas ilegibles).
 - Los directorios sin permiso de lectura (ej. `pg_data`) se omiten; no abortan el análisis.
 

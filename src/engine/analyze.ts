@@ -209,6 +209,42 @@ function collectChangedLines(changedFileAnalyses: Map<string, ChangedFileAnalysi
         .reduce((acc, file) => acc + file.modifiedLines.size, 0);
 }
 
+/**
+ * Surfaces dynamic imports whose argument is not statically resolvable
+ * (template literals with variables, concatenation...). The dependency
+ * graph records them; here they become an explicit warning instead of a
+ * silent blind spot in the blast radius.
+ *
+ * Deterministic: files sorted alphabetically, at most 5 listed.
+ */
+function warnUnresolvedDynamicImports(
+    counts: Map<string, number>,
+    emitWarning: (warning: AnalysisWarning) => void
+): void {
+    if (counts.size === 0) return;
+
+    const entries = Array.from(counts.entries())
+        .sort(([a], [b]) => a.localeCompare(b));
+    const totalImports = entries.reduce((acc, [, count]) => acc + count, 0);
+
+    const MAX_LISTED_FILES = 5;
+    const listed = entries
+        .slice(0, MAX_LISTED_FILES)
+        .map(([file, count]) => `${file} (${count})`)
+        .join(", ");
+    const remainingFiles = entries.length - MAX_LISTED_FILES;
+
+    emitWarning({
+        code: "unresolved-dynamic-imports",
+        message:
+            `${totalImports} dynamic import${totalImports === 1 ? "" : "s"} with ` +
+            `non-static arguments could not be resolved across ${entries.length} ` +
+            `file${entries.length === 1 ? "" : "s"}: ${listed}` +
+            `${remainingFiles > 0 ? `, and ${remainingFiles} more` : ""}. ` +
+            "Their targets are excluded from the dependency graph."
+    });
+}
+
 function toChangedFileReport(item: ImpactReportItem): ChangedFileReport {
     const symbolsView = item.analysis
         ? buildExportedSymbolsView(item.analysis)
@@ -341,6 +377,7 @@ export async function analyzeProject(options: AnalyzeOptions): Promise<AnalysisR
 
     // 5. Build the dependency graph and the test mapping
     const graph = buildDependencyGraph(projectRoot);
+    warnUnresolvedDynamicImports(graph.unresolvedDynamicImports, emitWarning);
     const testMapping = buildTestMapping(projectRoot);
 
     // 6. Build the report items and link the per-file analysis data
