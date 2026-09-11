@@ -27,7 +27,8 @@ Para ello combina:
 ### Requisitos
 
 - Un repositorio Git local (la herramienta se ejecuta dentro de él).
-- Proyecto TypeScript/JavaScript. El `tsconfig.json` en la raíz es opcional: si existe, aporta solo sus `compilerOptions` (aliases de rutas, decorators, target...). El descubrimiento de archivos siempre usa un recorrido propio que omite en silencio directorios sin permiso de lectura (ej. el `pg_data` de Docker); los campos `include`/`exclude` del tsconfig no se usan para el escaneo.
+- Proyecto **TypeScript** (`.ts`, `.tsx`, `.mts`, `.cts`). JavaScript está fuera del alcance: los `.js`/`.jsx` que aparezcan en un cambio se omiten y el reporte lo advierte con el código `unsupported-source-files`. Ver [5. Alcance y limitaciones](#5-alcance-y-limitaciones).
+- El `tsconfig.json` en la raíz es opcional: si existe, aporta solo sus `compilerOptions` (aliases de rutas, decorators, target...). El descubrimiento de archivos siempre usa un recorrido propio que omite en silencio directorios sin permiso de lectura (ej. el `pg_data` de Docker); los campos `include`/`exclude` del tsconfig no se usan para el escaneo.
 
 ### Ejecución
 
@@ -50,7 +51,7 @@ npm run dev
 
 ### 2.1 Pesos configurables del riesgo
 
-`--risk-weights` acepta un JSON con **cinco propiedades** (todas opcionales — las que no se incluyan valen `0`). Cada una pondera un factor del score:
+`--risk-weights` acepta un JSON con **cinco propiedades, más una opcional** (todas opcionales — las que no se incluyan valen `0`). Cada una pondera un factor del score:
 
 | Propiedad JSON | Peso por defecto | Señal que pondera | Umbral de saturación |
 |---|---|---|---|
@@ -59,6 +60,9 @@ npm run dev
 | `dependencyDepth` | `15` | Profundidad máxima de la cascada de dependencias | 4 niveles |
 | `testGaps` | `20` | Proporción de áreas afectadas sin tests | 100% sin cubrir |
 | `changeSize` | `15` | Tamaño del cambio en líneas modificadas | 200 líneas |
+| `testCallerImpact` | *(ausente)* | Consumidores que son archivos de test | 10 consumidores |
+
+**Sobre `testCallerImpact`:** mientras no se define, los tests cuentan como cualquier otro consumidor dentro de `callerImpact`. En cuanto se define — incluso en `0` —, `callerImpact` pasa a contar solo consumidores de producción y los tests saturan su propio peso. Un `0` explícito los exime del score.
 
 **Cómo se calcula cada factor:** puntos = peso × saturación, donde la saturación va de 0 a 1 según el umbral. Ejemplos con los pesos por defecto:
 
@@ -69,6 +73,7 @@ npm run dev
 **Reglas:**
 
 - Los pesos no tienen que sumar 100: el score final se limita a 100.
+- Los puntos de cada razón suman exactamente el score (salvo cuando satura en 100): cada punto del total es rastreable a una razón del reporte.
 - Si el peso de un factor es `0`, ese factor no aporta puntos (y su razón no aparece con puntos).
 - Si el JSON incluye claves desconocidas o valores no numéricos, el comando falla con un error claro listando las claves válidas.
 - El resto de la fórmula (umbrales y niveles `LOW/MEDIUM/HIGH/CRITICAL`) no es configurable en el MVP.
@@ -220,7 +225,7 @@ Hay dos niveles de granularidad: `PaymentService` lista las referencias a la **c
 ```
 **Blast radius** — todos los archivos que **importan al archivo cambiado** (`imported by ↓` marca la dirección: estos archivos consumen lo que este archivo exporta, no al revés). Es dependencia **estática/posible**: si hay alcance transitivo aparece como `(X direct, Y total, depth Z)` y los archivos se agrupan por **nivel de cascada**: `Level 1` importa directamente al archivo cambiado, `Level 2` importa a alguien de `Level 1`, y así sucesivamente.
 
-Este bloque es informativo: el riesgo real NO se calcula sobre él, sino sobre los usos reales de símbolos (bloque anterior).
+Este bloque mide **exposición potencial**, no uso real. Los dos mecanismos son complementarios y ambos entran en el score, pero por factores distintos: los consumidores reales del bloque anterior alimentan `callerImpact` (30 pts), y este grafo alimenta `affectedFiles` y `dependencyDepth` (35 pts). Dicho de otra forma: "quién ejecuta lo que cambiaste" y "cuánta superficie del proyecto cuelga de ese archivo" se puntúan por separado.
 
 > **Nota sobre ciclos**: si dos archivos se importan mutuamente (ej. un controller que importa el service para inyectarlo, y el service que importa DTOs/interfaces declarados dentro del controller), cada tarjeta listará a la otra en su blast radius — ambas entradas son correctas. Para eliminar ese ruido, extrae los tipos compartidos a un archivo propio (ej. `withdraws.dto.ts`).
 
@@ -266,14 +271,34 @@ Este bloque es informativo: el riesgo real NO se calcula sobre él, sino sobre l
 | `Blast radius (X direct, Y total, depth Z)` | La dependencia se propaga en cascada (Z niveles) |
 | "No impacted consumers detected" | Cambio sin consumidores → riesgo bajo por defecto |
 
-## 5. Limitaciones conocidas
+## 5. Alcance y limitaciones
 
-- Compara commits; los cambios **sin commitear** en el working tree no se analizan.
-- La cobertura de tests se basa en imports **directos** de los archivos de test (no transitiva).
-- El grafo solo considera imports relativos (no `node_modules` ni path aliases no relativos), tanto estáticos como dinámicos (`import(...)`/`require(...)`/`require.resolve(...)`). Los argumentos no estáticos (template literals con variables, concatenaciones) no son resolubles: se registran y se emite la advertencia `unresolved-dynamic-imports` en lugar de omitirse en silencio.
-- La granularidad de "símbolo modificado" es la declaración top-level; dentro de clases, el reporte indica además los métodos públicos concretos modificados (los privados/protegidos no se reportan).
-- **Alcance del análisis**: el descubrimiento de fuentes recorre todo el árbol del repositorio (omit `node_modules`/`dist`/`build`, directorios ocultos, symlinks y rutas ilegibles) y añade todos los `.ts/.tsx`; el tsconfig raíz aporta solo sus `compilerOptions`, nunca su globbing de archivos. En monorepos con varios tsconfigs se usa únicamente el de la raíz.
-- **Directorios ilegibles**: carpetas sin permiso de lectura (ej. `pg_data` de Docker) se omiten del análisis en silencio; nunca abortan la ejecución.
+ImpactWave es un **prototipo**. Su alcance está acotado a propósito: prefiere declarar algo fuera de alcance antes que aproximarlo mal.
+
+### 5.1 Dentro del alcance
+
+- Proyectos **TypeScript**: `.ts`, `.tsx`, `.mts`, `.cts`.
+- Cambios **ya commiteados** (`git diff base..HEAD`) en un repositorio Git local.
+- Imports **relativos** dentro del proyecto, estáticos y dinámicos con argumento estático.
+- Análisis local: el código nunca se envía a ningún servicio.
+
+### 5.2 Fuera del alcance
+
+- **JavaScript** (`.js`, `.jsx`, `.mjs`, `.cjs`): no se descubre ni se parsea. Si un cambio toca esos archivos, se omiten y el reporte lo advierte (`unsupported-source-files`). Es una decisión explícita: soportarlo a medias producía reportes que parecían completos mientras no veían ni un solo consumidor JavaScript.
+- Otros lenguajes.
+- Los cambios **sin commitear** en el working tree.
+- `node_modules`, path aliases no relativos y monorepos con varios tsconfigs (solo se usa el de la raíz).
+- El juicio semántico del cambio: la herramienta dice qué símbolo cambió y quién lo usa, no si el cambio rompe el contrato.
+
+### 5.3 Limitaciones conocidas
+
+- **Granularidad**: "símbolo modificado" es la intersección del diff con el rango de líneas de la declaración top-level. Un cambio no funcional (un comentario, un reformateo) dentro de ese rango marca el símbolo como modificado. Dentro de clases, el reporte indica además los métodos públicos concretos (los privados/protegidos no se reportan).
+- **Archivos eliminados**: no se analizan sus símbolos ni sus consumidores; borrar un archivo que otros siguen importando no se señala.
+- **Renombrados**: se reportan como una modificación de la ruta nueva, con `previousPath`, y se comparan contra el contenido anterior.
+- La cobertura de tests es **transitiva** a través del grafo de dependencias, con un tope de 4 saltos (`DEFAULT_TEST_COVERAGE_DEPTH`, configurable por llamada). El tope evita que un test que importa la raíz del proyecto reclame cobertura sobre todo el codebase.
+- Los imports dinámicos con argumento **no estático** (template literals con variables, concatenaciones) no son resolubles: se registran y se emite la advertencia `unresolved-dynamic-imports` en lugar de omitirse en silencio.
+- **Descubrimiento de fuentes**: recorre todo el árbol del repositorio omitiendo `node_modules`/`dist`/`build`, directorios ocultos y symlinks; el tsconfig raíz aporta solo sus `compilerOptions`, nunca su globbing de archivos.
+- **Directorios ilegibles**: carpetas sin permiso de lectura (ej. `pg_data` de Docker) se omiten en silencio; nunca abortan la ejecución.
 
 ## 6. Más información
 

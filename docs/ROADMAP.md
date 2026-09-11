@@ -7,6 +7,20 @@ Todo lo demás — superficies nuevas, comandos auxiliares, integraciones — se
 mantiene aparcado al final de este documento hasta que el núcleo sea
 confiable en los escenarios difíciles.
 
+## Fuera de alcance (decidido, no aparcado)
+
+Esto no vuelve al roadmap: define lo que el prototipo **no** es. El detalle
+y el porqué están en [`README.md`](../README.md#alcance) y en
+[`docs/GUIA.md`](GUIA.md#5-alcance-y-limitaciones).
+
+- **JavaScript** (`.js`, `.jsx`, `.mjs`, `.cjs`) y cualquier otro lenguaje.
+  El alcance es TypeScript: `.ts`, `.tsx`, `.mts`, `.cts`.
+- Analizar el working tree sin commitear.
+- Resolver path aliases no relativos, `node_modules` o varios tsconfigs por
+  repositorio.
+- Juzgar semánticamente si un cambio rompe un contrato (eso es trabajo del
+  revisor; la herramienta le dice dónde mirar).
+
 ## Aparcado (superficie, no núcleo)
 
 Estos elementos aportan valor pero no mejoran la precisión del análisis;
@@ -24,6 +38,14 @@ se retoman cuando el núcleo pase la auditoría de v1.2.0:
 - Rendimiento en monorepos grandes (caché incremental sobre `findReferences`).
 
 ## Entregado
+
+- **Sin publicar**: corrección de bugs del prototipo y cierre de alcance —
+  clasificación de consumidores por AST (los imports multilínea dejan de
+  contar como uso real), renombrados diffeados contra su contenido anterior,
+  detección de cambios que solo borran código, rama base detectada como ref
+  remota (`origin/release/2.0`), JavaScript fuera de alcance con advertencia
+  explícita en vez de crash, y razones de riesgo que suman exactamente el
+  score. Calibración remedida (`docs/RISK_CALIBRATION.md`).
 
 - **v1.2.0**: precisión del núcleo — imports dinámicos (`import()`/`require()`
   con argumento estático) crean aristas en el grafo y lo no resoluble se

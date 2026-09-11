@@ -27,7 +27,8 @@ To do so it combines:
 ### Requirements
 
 - A local Git repository (the tool runs inside it).
-- A TypeScript/JavaScript project. A root `tsconfig.json` is optional: when present, it contributes only `compilerOptions` (path aliases, decorators, target...). File discovery always uses our own walk, which silently skips directories without read permission (e.g. Docker's `pg_data`); the tsconfig `include`/`exclude` fields are not used for scanning.
+- A **TypeScript** project (`.ts`, `.tsx`, `.mts`, `.cts`). JavaScript is out of scope: `.js`/`.jsx` files appearing in a change are skipped and the report says so through the `unsupported-source-files` code. See [5. Scope and limitations](#5-scope-and-limitations).
+- A root `tsconfig.json` is optional: when present, it contributes only `compilerOptions` (path aliases, decorators, target...). File discovery always uses our own walk, which silently skips directories without read permission (e.g. Docker's `pg_data`); the tsconfig `include`/`exclude` fields are not used for scanning.
 
 ### Running
 
@@ -50,7 +51,7 @@ npm run dev
 
 ### 2.1 Configurable risk weights
 
-`--risk-weights` accepts a JSON object with **five properties** (all optional — omitted ones default to `0`). Each one weighs a factor of the score:
+`--risk-weights` accepts a JSON object with **five properties, plus an optional one** (all optional — omitted ones default to `0`). Each one weighs a factor of the score:
 
 | JSON property | Default weight | Signal it weighs | Saturation threshold |
 |---|---|---|---|
@@ -59,6 +60,9 @@ npm run dev
 | `dependencyDepth` | `15` | Maximum depth of the dependency cascade | 4 levels |
 | `testGaps` | `20` | Share of affected areas without tests | 100% uncovered |
 | `changeSize` | `15` | Change size in modified lines | 200 lines |
+| `testCallerImpact` | *(absent)* | Consumers that are test files | 10 consumers |
+
+**About `testCallerImpact`:** while it is not set, tests count as any other consumer inside `callerImpact`. Once it is set — even to `0` — `callerImpact` counts production consumers only and tests saturate their own weight. An explicit `0` exempts them from the score.
 
 **How each factor is computed:** points = weight × saturation, where saturation goes from 0 to 1 according to the threshold. Examples with default weights:
 
@@ -69,6 +73,7 @@ npm run dev
 **Rules:**
 
 - Weights don't have to add up to 100: the final score is capped at 100.
+- The points of each reason add up exactly to the score (unless it saturates at 100): every point of the total is traceable to a reason in the report.
 - If a factor's weight is `0`, that factor contributes no points (and its reason shows none either).
 - If the JSON contains unknown keys or non-numeric values, the command fails with a clear error listing the valid keys.
 - The rest of the formula (thresholds and `LOW/MEDIUM/HIGH/CRITICAL` levels) is not configurable in the MVP.
@@ -218,7 +223,7 @@ Two granularity levels are shown: `PaymentService` lists references to the **cla
 ```
 **Blast radius** — all files that **import the changed file** (`imported by ↓` marks the direction: these files consume what this file exports, not the other way around). It is **static/potential** dependency: transitive reach appears as `(X direct, Y total, depth Z)` and files are grouped by **cascade level**: `Level 1` imports the changed file directly, `Level 2` imports someone from `Level 1`, and so on.
 
-This block is informational: real risk is NOT computed from it, but from real symbol usages (previous block).
+This block measures **potential exposure**, not real usage. Both mechanisms are complementary and both feed the score, through different factors: the real consumers of the previous block feed `callerImpact` (30 pts), and this graph feeds `affectedFiles` and `dependencyDepth` (35 pts). In other words: "who executes what you changed" and "how much of the project hangs off that file" are scored separately.
 
 > **Note on cycles**: if two files import each other (e.g. a controller importing the service for injection, and the service importing DTOs/interfaces declared inside the controller), each card will list the other in its blast radius — both entries are correct. To remove that noise, extract shared types into their own file (e.g. `withdraws.dto.ts`).
 
@@ -264,13 +269,33 @@ This block is informational: real risk is NOT computed from it, but from real sy
 | `Blast radius (X direct, Y total, depth Z)` | Dependency propagates in cascade (Z levels) |
 | "No impacted consumers detected" | Change without consumers → low risk by default |
 
-## 5. Known limitations
+## 5. Scope and limitations
 
-- Compares commits; **uncommitted** working tree changes are not analyzed.
-- Test coverage is based on **direct** imports of test files (not transitive).
-- The graph only considers relative imports (no `node_modules` nor non-relative path aliases), both static and dynamic (`import(...)`/`require(...)`/`require.resolve(...)`). Non-static arguments (template literals with variables, concatenation) cannot be resolved: they are recorded and surfaced through the `unresolved-dynamic-imports` warning instead of being silently dropped.
-- "Modified symbol" granularity is the top-level declaration; within classes, the report also lists the concrete modified public methods (private/protected ones are not reported).
-- **Analysis scope**: source discovery walks the whole repository tree (skipping `node_modules`/`dist`/`build`, hidden directories, symlinks and unreadable paths) and adds every `.ts/.tsx`; the root tsconfig contributes only its `compilerOptions`, never its file globbing. In monorepos with several tsconfigs, only the root one is used.
+ImpactWave is a **prototype**. Its scope is bounded on purpose: it would rather declare something out of scope than approximate it badly.
+
+### 5.1 In scope
+
+- **TypeScript** projects: `.ts`, `.tsx`, `.mts`, `.cts`.
+- **Committed** changes (`git diff base..HEAD`) in a local Git repository.
+- **Relative** intra-project imports, static and dynamic ones with a static argument.
+- Local analysis: code is never sent to any service.
+
+### 5.2 Out of scope
+
+- **JavaScript** (`.js`, `.jsx`, `.mjs`, `.cjs`): neither discovered nor parsed. When a change touches those files they are skipped and the report warns about it (`unsupported-source-files`). This is a deliberate decision: half-supporting it produced reports that looked complete while missing every JavaScript consumer.
+- Other languages.
+- **Uncommitted** working tree changes.
+- `node_modules`, non-relative path aliases and monorepos with several tsconfigs (only the root one is used).
+- Semantic judgement of the change: the tool tells which symbol changed and who uses it, not whether the change breaks the contract.
+
+### 5.3 Known limitations
+
+- **Granularity**: a "modified symbol" is the intersection of the diff with the top-level declaration's line range. A non-functional change (a comment, a reformat) inside that range marks the symbol as modified. Within classes, the report also lists the concrete modified public methods (private/protected ones are not reported).
+- **Deleted files**: their symbols and consumers are not analyzed; deleting a file others still import is not flagged.
+- **Renames** are reported as a modification of the new path, with `previousPath`, diffed against the previous content.
+- Test coverage is **transitive** through the dependency graph, capped at 4 hops (`DEFAULT_TEST_COVERAGE_DEPTH`, configurable per call). The cap prevents a test importing the project root from claiming coverage over the whole codebase.
+- Dynamic imports with a **non-static** argument (template literals with variables, concatenation) cannot be resolved: they are recorded and surfaced through the `unresolved-dynamic-imports` warning instead of being silently dropped.
+- **Source discovery** walks the whole repository tree, skipping `node_modules`/`dist`/`build`, hidden directories and symlinks; the root tsconfig contributes only its `compilerOptions`, never its file globbing.
 - **Unreadable directories**: folders without read permission (e.g. Docker's `pg_data`) are silently skipped; they never abort the analysis.
 
 ## 6. More information
