@@ -21,7 +21,6 @@ import type { ChangedFile } from "./git/changed-file.interface.js";
 import { getProject } from "./project.js";
 import { isAnalyzableSourceFile } from "./project-files.js";
 import type { TsConfigWarning } from "./tsconfig-compiler-options.js";
-import { isImportOnlyUsage } from "./analyzer/usage-filter.js";
 import { buildExportedSymbolsView } from "./reporter/symbols-view.js";
 import type {
     AnalysisResult,
@@ -329,7 +328,7 @@ function toChangedFileReport(item: ImpactReportItem): ChangedFileReport {
                 filePath: consumer.filePath,
                 line: consumer.line,
                 snippet: consumer.snippet,
-                importOnly: isImportOnlyUsage(consumer.snippet)
+                importOnly: consumer.importOnly
             }))
     );
 

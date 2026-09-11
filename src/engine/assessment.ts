@@ -5,7 +5,6 @@ import { analyzeFile } from "./parser/parser.js";
 import type { FileAnalysis } from "./parser/file-analysis.interface.js";
 import type { DependencyGraph } from "./graph/dependency-graph.interface.js";
 import { findTransitiveDependents } from "./graph/dependency.js";
-import { isImportOnlyUsage } from "./analyzer/usage-filter.js";
 import { computeImpactCoverage } from "./testing/impact-coverage.js";
 import { isTestFile } from "./testing/test-mapping.js";
 import type { TestMapping } from "./testing/test-mapping.interface.js";
@@ -58,7 +57,7 @@ export function computeAssessment(
     for (const item of reportItems) {
         for (const symbolImpact of item.symbolImpacts ?? []) {
             for (const consumer of symbolImpact.consumers) {
-                if (isImportOnlyUsage(consumer.snippet)) {
+                if (consumer.importOnly) {
                     continue;
                 }
                 uniqueImpactedFiles.add(consumer.filePath);

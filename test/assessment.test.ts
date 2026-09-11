@@ -4,11 +4,12 @@ import { computeAssessment } from "../src/engine/assessment.js";
 import type { ImpactReportItem } from "../src/engine/impact-report-item.interface.js";
 import type { FileStatus } from "../src/engine/git/file-status.js";
 import type { TestMapping } from "../src/engine/testing/test-mapping.interface.js";
+import type { SymbolImpact } from "../src/engine/analyzer/symbol-impact.interface.js";
 
 const EMPTY_MAPPING: TestMapping = { testFiles: [], coverage: new Map() };
 
 function reportItemWithConsumers(
-    consumers: { filePath: string; line: number; snippet: string }[]
+    consumers: SymbolImpact["consumers"]
 ): ImpactReportItem[] {
     return [
         {
@@ -26,9 +27,9 @@ function reportItemWithConsumers(
 }
 
 const ONE_PROD_TWO_TESTS = reportItemWithConsumers([
-    { filePath: "payment/CheckoutService.ts", line: 4, snippet: "this.paymentService.calculate(amount)" },
-    { filePath: "payment/PaymentService.test.ts", line: 6, snippet: "service.calculate(100)" },
-    { filePath: "payment/PaymentService2.test.ts", line: 7, snippet: "new PaymentService().calculate(1)" }
+    { filePath: "payment/CheckoutService.ts", line: 4, snippet: "this.paymentService.calculate(amount)", importOnly: false },
+    { filePath: "payment/PaymentService.test.ts", line: 6, snippet: "service.calculate(100)", importOnly: false },
+    { filePath: "payment/PaymentService2.test.ts", line: 7, snippet: "new PaymentService().calculate(1)", importOnly: false }
 ]);
 
 describe("assessment caller impact split", () => {
@@ -69,5 +70,19 @@ describe("assessment caller impact split", () => {
         assert.ok(assessment.riskAssessment.reasons.some(r =>
             r.label === "2 test consumers of modified symbols"
         ));
+    });
+});
+
+describe("assessment blast radius", () => {
+    it("excludes contract-wiring consumers from the impacted files", () => {
+        // The barrel only re-exports the symbol; it executes nothing.
+        const items = reportItemWithConsumers([
+            { filePath: "payment/CheckoutService.ts", line: 7, snippet: "this.paymentService.calculate(amount)", importOnly: false },
+            { filePath: "payment/index.ts", line: 1, snippet: "PaymentService,", importOnly: true }
+        ]);
+
+        const assessment = computeAssessment(items, EMPTY_MAPPING, 0);
+
+        assert.equal(assessment.uniqueDependentFiles, 1);
     });
 });
