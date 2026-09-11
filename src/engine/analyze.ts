@@ -19,6 +19,7 @@ import type { SymbolImpact } from "./analyzer/symbol-impact.interface.js";
 import type { ImpactReportItem } from "./impact-report-item.interface.js";
 import type { ChangedFile } from "./git/changed-file.interface.js";
 import { getProject } from "./project.js";
+import { isAnalyzableSourceFile } from "./project-files.js";
 import type { TsConfigWarning } from "./tsconfig-compiler-options.js";
 import { isImportOnlyUsage } from "./analyzer/usage-filter.js";
 import { buildExportedSymbolsView } from "./reporter/symbols-view.js";
@@ -116,6 +117,15 @@ async function collectChangedFileAnalyses(
 
     for (const file of changedFiles) {
         if (file.status === FileStatus.Deleted) continue;
+
+        // Outside the analyzed language scope (JavaScript, JSON, docs...):
+        // counted as skipped rather than pushed through the parser. A .js
+        // file used to parse and then crash the run when findReferences
+        // reached a file the TypeScript program never contained.
+        if (!isAnalyzableSourceFile(file.path)) {
+            skippedFiles++;
+            continue;
+        }
 
         let analysis: FileAnalysis;
         try {
@@ -245,6 +255,42 @@ function warnUnresolvedDynamicImports(
     });
 }
 
+/** Files whose language is outside the analyzed scope (TypeScript only). */
+const JAVASCRIPT_FILE = /\.(?:jsx?|mjs|cjs)$/i;
+
+/**
+ * Surfaces changed JavaScript files. They are not parsed, so their symbols,
+ * consumers and tests are absent from the report: saying so is the
+ * difference between a limited report and a misleading one, since a change
+ * with real consumers would otherwise look perfectly isolated.
+ *
+ * Deterministic: files sorted alphabetically, at most 5 listed.
+ */
+function warnUnsupportedSourceFiles(
+    changedFiles: ChangedFile[],
+    emitWarning: (warning: AnalysisWarning) => void
+): void {
+    const files = changedFiles
+        .filter(file => JAVASCRIPT_FILE.test(file.path))
+        .map(file => file.path)
+        .sort((a, b) => a.localeCompare(b));
+
+    if (files.length === 0) return;
+
+    const MAX_LISTED_FILES = 5;
+    const listed = files.slice(0, MAX_LISTED_FILES).join(", ");
+    const remainingFiles = files.length - MAX_LISTED_FILES;
+
+    emitWarning({
+        code: "unsupported-source-files",
+        message:
+            `${files.length} changed JavaScript file${files.length === 1 ? "" : "s"} ` +
+            `outside the analyzed scope (TypeScript only): ${listed}` +
+            `${remainingFiles > 0 ? `, and ${remainingFiles} more` : ""}. ` +
+            "Their symbols, consumers and tests are not part of this report."
+    });
+}
+
 function toChangedFileReport(item: ImpactReportItem): ChangedFileReport {
     const symbolsView = item.analysis
         ? buildExportedSymbolsView(item.analysis)
@@ -367,6 +413,7 @@ export async function analyzeProject(options: AnalyzeOptions): Promise<AnalysisR
     );
 
     const changedFiles = await getChangedFiles(git, baseBranch, "HEAD");
+    warnUnsupportedSourceFiles(changedFiles, emitWarning);
 
     // 3. Symbol analyzer with a single shared AST index (high performance)
     const symbolAnalyzer = new SymbolAnalyzer(projectRoot);

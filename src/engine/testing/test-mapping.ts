@@ -1,5 +1,6 @@
 import path from "node:path";
 import { getProject } from "../project.js";
+import { isAnalyzableSourceFile } from "../project-files.js";
 import { findTransitiveFiles } from "../graph/dependency.js";
 import type { DependencyGraph } from "../graph/dependency-graph.interface.js";
 import { buildDependencyGraph } from "../graph/dependency.js";
@@ -27,9 +28,12 @@ export const DEFAULT_TEST_COVERAGE_DEPTH = 4;
 
 /**
  * Determines whether a path corresponds to a test file (name-based).
+ *
+ * The extension half of the rule comes from the discovery scope: a file the
+ * analysis cannot load can never act as a test here.
  */
 export function isTestFile(filePath: string): boolean {
-    return /\.(test|spec)\.(ts|tsx|js|jsx)$/i.test(filePath);
+    return /\.(test|spec)\.[^.]+$/i.test(filePath) && isAnalyzableSourceFile(filePath);
 }
 
 /**
