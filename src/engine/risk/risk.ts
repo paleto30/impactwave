@@ -57,64 +57,80 @@ export function evaluateRisk(
         ? factors.uniqueConsumers - testConsumers
         : factors.uniqueConsumers;
 
-    const callerImpact =
-        Math.min(callerBasis / CALLER_IMPACT_THRESHOLD, 1) * w.callerImpact;
+    // Each factor is rounded exactly once, here, and the score is the sum of
+    // those same rounded points. Explainability is then literal: the reasons
+    // printed in the report always add up to the score (unless it saturates
+    // at MAX_SCORE). Rounding the total separately made them disagree.
+    const callerImpact = Math.round(
+        Math.min(callerBasis / CALLER_IMPACT_THRESHOLD, 1) * w.callerImpact
+    );
+    const testCallerImpact = splitTestCallers
+        ? Math.round(
+            Math.min(testConsumers / CALLER_IMPACT_THRESHOLD, 1) *
+            (w.testCallerImpact ?? 0)
+        )
+        : 0;
+
     if (factors.uniqueConsumers > 0 && !splitTestCallers) {
         reasons.push({
             label: `${factors.uniqueConsumers} consumer${factors.uniqueConsumers === 1 ? "" : "s"} of modified symbols`,
-            points: Math.round(callerImpact)
+            points: callerImpact
         });
     } else if (callerBasis > 0 || testConsumers > 0) {
         if (callerBasis > 0) {
             reasons.push({
                 label:
                     `${callerBasis} production consumer${callerBasis === 1 ? "" : "s"} of modified symbols`,
-                points: Math.round(callerImpact)
+                points: callerImpact
             });
         }
         if (testConsumers > 0) {
-            const testCallerPoints =
-                Math.min(testConsumers / CALLER_IMPACT_THRESHOLD, 1) * (w.testCallerImpact ?? 0);
             reasons.push({
                 label: `${testConsumers} test consumer${testConsumers === 1 ? "" : "s"} of modified symbols`,
-                points: Math.round(testCallerPoints)
+                points: testCallerImpact
             });
         }
     }
 
-    const affectedFiles =
-        Math.min(factors.transitiveFiles / AFFECTED_FILES_THRESHOLD, 1) * w.affectedFiles;
+    const affectedFiles = Math.round(
+        Math.min(factors.transitiveFiles / AFFECTED_FILES_THRESHOLD, 1) * w.affectedFiles
+    );
     if (factors.transitiveFiles > 0) {
         reasons.push({
             label: `${factors.transitiveFiles} affected files (transitive reach)`,
-            points: Math.round(affectedFiles)
+            points: affectedFiles
         });
     }
 
-    const dependencyDepth =
-        Math.min(factors.maxDepth / DEPENDENCY_DEPTH_THRESHOLD, 1) * w.dependencyDepth;
+    const dependencyDepth = Math.round(
+        Math.min(factors.maxDepth / DEPENDENCY_DEPTH_THRESHOLD, 1) * w.dependencyDepth
+    );
     if (factors.maxDepth > 0) {
         reasons.push({
             label: `Impact reaches depth ${factors.maxDepth} dependency level${factors.maxDepth === 1 ? "" : "s"}`,
-            points: Math.round(dependencyDepth)
+            points: dependencyDepth
         });
     }
 
     const testGaps = factors.affectedComponents === 0
         ? 0
-        : (factors.uncoveredComponents / factors.affectedComponents) * w.testGaps;
+        : Math.round(
+            (factors.uncoveredComponents / factors.affectedComponents) * w.testGaps
+        );
     if (factors.uncoveredComponents > 0) {
         reasons.push({
             label: `${factors.uncoveredComponents} affected area${factors.uncoveredComponents === 1 ? "" : "s"} without detected tests`,
-            points: Math.round(testGaps)
+            points: testGaps
         });
     }
 
-    const changeSize = Math.min(factors.changedLines / CHANGE_SIZE_THRESHOLD, 1) * w.changeSize;
+    const changeSize = Math.round(
+        Math.min(factors.changedLines / CHANGE_SIZE_THRESHOLD, 1) * w.changeSize
+    );
     if (factors.changedLines > 0) {
         reasons.push({
             label: `${factors.changedLines} line${factors.changedLines === 1 ? "" : "s"} modified`,
-            points: Math.round(changeSize)
+            points: changeSize
         });
     }
 
@@ -124,17 +140,12 @@ export function evaluateRisk(
 
     const score = Math.min(
         MAX_SCORE,
-        Math.round(
-            callerImpact +
-            affectedFiles +
-            dependencyDepth +
-            testGaps +
-            changeSize +
-            (splitTestCallers
-                ? Math.min(testConsumers / CALLER_IMPACT_THRESHOLD, 1) *
-                  (w.testCallerImpact ?? 0)
-                : 0)
-        )
+        callerImpact +
+        testCallerImpact +
+        affectedFiles +
+        dependencyDepth +
+        testGaps +
+        changeSize
     );
 
     return { score, level: classifyRisk(score), reasons };

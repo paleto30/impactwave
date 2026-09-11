@@ -157,3 +157,47 @@ describe("testCallerImpact factor", () => {
         assert.equal(parsed.ok, true);
     });
 });
+
+describe("explainability", () => {
+    it("reasons always add up to the score", () => {
+        // Every factor lands on a fraction here, which is exactly when
+        // rounding the total separately used to disagree with the points
+        // printed next to each reason.
+        const assessment = evaluateRisk({
+            uniqueConsumers: 3,
+            transitiveFiles: 7,
+            maxDepth: 3,
+            affectedComponents: 3,
+            uncoveredComponents: 1,
+            changedLines: 37
+        });
+
+        const sum = assessment.reasons.reduce((acc, r) => acc + r.points, 0);
+        assert.equal(sum, assessment.score);
+    });
+
+    it("keeps reasons and score consistent in split-caller mode", () => {
+        const assessment = evaluateRisk(
+            {
+                uniqueConsumers: 7,
+                testConsumers: 3,
+                transitiveFiles: 4,
+                maxDepth: 2,
+                affectedComponents: 3,
+                uncoveredComponents: 2,
+                changedLines: 55
+            },
+            {
+                callerImpact: 30,
+                affectedFiles: 20,
+                dependencyDepth: 15,
+                testGaps: 20,
+                changeSize: 15,
+                testCallerImpact: 15
+            }
+        );
+
+        const sum = assessment.reasons.reduce((acc, r) => acc + r.points, 0);
+        assert.equal(sum, assessment.score);
+    });
+});
