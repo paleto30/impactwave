@@ -182,12 +182,16 @@ function printFileSection(item: ChangedFileReport): void {
         statusLabel = "DELETED";
     }
 
+    const renamedFrom = item.previousPath
+        ? ` ${colors.dim}(renamed from ${item.previousPath})${colors.reset}`
+        : "";
+
     console.log("");
     boxStart(colors.cyan);
     console.log(
         `${colors.cyan}│${colors.reset} ` +
         `${colors.bold}📄 [${statusColor}${statusLabel}${colors.reset}${colors.bold}] ` +
-        `${item.path}${colors.reset}`
+        `${item.path}${colors.reset}${renamedFrom}`
     );
     boxFooter(colors.cyan);
 

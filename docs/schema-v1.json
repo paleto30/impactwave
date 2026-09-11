@@ -167,6 +167,10 @@
       "properties": {
         "path": { "type": "string" },
         "status": { "enum": ["added", "modified", "deleted"] },
+        "previousPath": {
+          "type": "string",
+          "description": "Original path of a renamed file; renames are reported as a modification of their new path"
+        },
         "exportedSymbols": {
           "type": "array",
           "items": { "$ref": "#/$defs/exportedSymbol" },

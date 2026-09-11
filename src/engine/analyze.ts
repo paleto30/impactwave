@@ -140,7 +140,7 @@ async function collectChangedFileAnalyses(
         const exportedSymbols = getExportedSymbolNames(analysis);
         if (exportedSymbols.length === 0) continue;
 
-        const modifiedLines = await getModifiedLines(git, baseBranch, "HEAD", file.path);
+        const modifiedLines = await getModifiedLines(git, baseBranch, "HEAD", file);
 
         // Which symbols were physically touched in this file
         const modifiedSymbols = symbolAnalyzer.getModifiedSymbolNames(
@@ -352,6 +352,9 @@ function toChangedFileReport(item: ImpactReportItem): ChangedFileReport {
     return {
         path: item.file.path,
         status: item.file.status,
+        ...(item.file.previousPath !== undefined
+            ? { previousPath: item.file.previousPath }
+            : {}),
         ...(exportedSymbols !== undefined ? { exportedSymbols } : {}),
         dependents: item.dependents,
         transitive: {

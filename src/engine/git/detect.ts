@@ -40,6 +40,65 @@ export async function detectBaseBranch(git: SimpleGit): Promise<string | null> {
     }
 }
 
+/**
+ * Parses one `git diff --name-status` line into a changed file.
+ *
+ * Renames and copies carry three columns ("R100\told\tnew"). A rename is
+ * reported as a single modification of its new path, remembering where it
+ * came from: splitting it into delete + add made the new path look like a
+ * brand-new file whose every line was modified, marking every symbol in it
+ * as touched. Unknown statuses (unmerged entries during a conflict) are
+ * skipped instead of aborting the analysis.
+ */
+function parseChangedFileLine(line: string): ChangedFile | null {
+    const parts = line.split("\t");
+    const status = parts[0];
+
+    if (!status) {
+        throw new Error(`Invalid git diff line: ${line}`);
+    }
+
+    if (status.startsWith("R") || status.startsWith("C")) {
+        const [, oldPath, newPath] = parts;
+
+        if (!oldPath || !newPath) {
+            throw new Error(`Invalid rename line: ${line}`);
+        }
+
+        // A copy leaves its source untouched, so only the new path is new.
+        return status.startsWith("C")
+            ? { path: newPath, status: FileStatus.Added }
+            : {
+                path: newPath,
+                status: FileStatus.Modified,
+                previousPath: oldPath
+            };
+    }
+
+    const [, path] = parts;
+
+    if (!path) {
+        throw new Error(`Invalid git diff line: ${line}`);
+    }
+
+    switch (status) {
+        case "A":
+            return { path, status: FileStatus.Added };
+
+        // A type change (file <-> symlink) still changes the content that
+        // the analysis reads, so it is a modification like any other.
+        case "M":
+        case "T":
+            return { path, status: FileStatus.Modified };
+
+        case "D":
+            return { path, status: FileStatus.Deleted };
+
+        default:
+            return null;
+    }
+}
+
 export async function getChangedFiles(
     git: SimpleGit,
     base: string,
@@ -55,49 +114,8 @@ export async function getChangedFiles(
         .filter((line) => line.trim() !== "");
 
     for (const line of lines) {
-        const parts = line.split("\t");
-        const status = parts[0];
-
-        if (!status) {
-            throw new Error(`Invalid git diff line: ${line}`);
-        }
-
-        // Renames: "R100\told/path.ts\tnew/path.ts" -> 3 columns
-        if (status.startsWith("R")) {
-            const [, oldPath, newPath] = parts;
-
-            if (!oldPath || !newPath) {
-                throw new Error(`Invalid rename line: ${line}`);
-            }
-
-            changedFiles.push({ path: oldPath, status: FileStatus.Deleted });
-            changedFiles.push({ path: newPath, status: FileStatus.Added });
-            continue;
-        }
-
-        // Normal cases: "M\tpath.ts" -> 2 columns
-        const [, path] = parts;
-
-        if (!path) {
-            throw new Error(`Invalid git diff line: ${line}`);
-        }
-
-        switch (status) {
-            case "A":
-                changedFiles.push({ path, status: FileStatus.Added });
-                break;
-
-            case "M":
-                changedFiles.push({ path, status: FileStatus.Modified });
-                break;
-
-            case "D":
-                changedFiles.push({ path, status: FileStatus.Deleted });
-                break;
-
-            default:
-                throw new Error(`Unsupported git status: ${status}`);
-        }
+        const changedFile = parseChangedFileLine(line);
+        if (changedFile) changedFiles.push(changedFile);
     }
 
     return changedFiles;
@@ -114,12 +132,22 @@ export async function branchExists(git: SimpleGit, ref: string) {
 
 /**
  * Returns the set of line numbers modified in a file relative to the base branch.
+ *
+ * Line numbers refer to the file at `head`.
  */
-export async function getModifiedLines(git: SimpleGit, base: string, head: string, filePath: string): Promise<Set<number>> {
+export async function getModifiedLines(
+    git: SimpleGit,
+    base: string,
+    head: string,
+    file: ChangedFile
+): Promise<Set<number>> {
     const modifiedLines = new Set<number>();
+    const paths = file.previousPath ? [file.previousPath, file.path] : [file.path];
+
     try {
-        // Get the unified diff for the specific file
-        const diff = await git.diff([base, head, "--", filePath]);
+        // -M plus both paths so a renamed file diffs against its previous
+        // content instead of reporting every line as added.
+        const diff = await git.diff([base, head, "-M", "--", ...paths]);
         const lines = diff.split("\n");
 
         let currentLine = 0;
