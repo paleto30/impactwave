@@ -2,6 +2,9 @@ import { simpleGit, type SimpleGit } from "simple-git";
 import { FileStatus } from "./file-status.js";
 import type { ChangedFile } from "./changed-file.interface.js";
 
+/** Prefix of a remote-tracking ref: refs/remotes/origin/main. */
+const REMOTE_REF_PREFIX = "refs/remotes/";
+
 export async function detectRepo(
     projectRoot: string = process.cwd()
 ): Promise<SimpleGit | null> {
@@ -9,35 +12,51 @@ export async function detectRepo(
 
     const isRepo = await git.checkIsRepo();
 
-    if (!isRepo) {
-        console.log("This directory is not a Git repository.");
+    // Presentation-free by contract: the caller turns this null into an
+    // AnalyzeError and decides where the message goes. Printing here leaked
+    // text into stdout, which --json reserves for the JSON document.
+    return isRepo ? git : null;
+}
+
+/**
+ * Resolves the ref that origin/HEAD points at, keeping the remote prefix.
+ *
+ * Returning the remote-tracking name ("origin/main") instead of the last
+ * path segment matters twice: branch names containing slashes
+ * ("release/2.0") survive intact, and the ref still resolves in CI clones
+ * that check out a single branch and never create the local one.
+ */
+async function detectRemoteHeadBranch(git: SimpleGit): Promise<string | null> {
+    try {
+        const ref = (
+            await git.raw(["symbolic-ref", "refs/remotes/origin/HEAD"])
+        ).trim();
+
+        return ref.startsWith(REMOTE_REF_PREFIX)
+            ? ref.slice(REMOTE_REF_PREFIX.length)
+            : null;
+    } catch {
         return null;
     }
+}
 
-    return git;
+async function detectLocalBaseBranch(git: SimpleGit): Promise<string | null> {
+    try {
+        const branchSummary = await git.branchLocal();
+
+        if (branchSummary.all.includes("main")) return "main";
+        if (branchSummary.all.includes("master")) return "master";
+
+        return null;
+    } catch {
+        // Repository without branches yet (no commits): the caller falls
+        // back to HEAD~1 with an explicit warning.
+        return null;
+    }
 }
 
 export async function detectBaseBranch(git: SimpleGit): Promise<string | null> {
-    try {
-        const remoteHead = await git.raw([
-            "symbolic-ref",
-            "refs/remotes/origin/HEAD"
-        ]);
-
-        // refs/remotes/origin/main -> main
-        return remoteHead.trim().split("/").pop() ?? null;
-
-    } catch (error) {
-        const branchSummary = await git.branchLocal();
-
-        if (branchSummary.all.includes("main"))
-            return "main";
-
-        if (branchSummary.all.includes("master"))
-            return "master";
-
-        return null;
-    }
+    return (await detectRemoteHeadBranch(git)) ?? (await detectLocalBaseBranch(git));
 }
 
 /**

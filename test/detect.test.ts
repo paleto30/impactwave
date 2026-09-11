@@ -1,10 +1,16 @@
 import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { simpleGit } from "simple-git";
 import { createGitRepo, git, type GitRepoFixture } from "./helpers/git-repo.js";
-import { getChangedFiles, getModifiedLines } from "../src/engine/git/detect.js";
+import {
+    branchExists,
+    detectBaseBranch,
+    getChangedFiles,
+    getModifiedLines
+} from "../src/engine/git/detect.js";
 import { FileStatus } from "../src/engine/git/file-status.js";
 
 const CORE = [
@@ -92,5 +98,42 @@ describe("changed lines: deletions", () => {
         // Line 3 of the new file ("return x;") now occupies the place of the
         // removed validation, so the enclosing symbol is seen as modified.
         assert.deepEqual([...lines], [3]);
+    });
+});
+
+describe("base branch detection", () => {
+    let origin: GitRepoFixture;
+    let cloneDir: string;
+
+    after(() => {
+        origin?.cleanup();
+        if (cloneDir) rmSync(cloneDir, { recursive: true, force: true });
+    });
+
+    it("keeps the remote prefix and slashes, and resolves in a CI-style clone", async () => {
+        origin = createGitRepo({ "a.ts": "export const a = 1;\n" });
+        git(origin.dir, "branch", "-M", "release/2.0");
+
+        cloneDir = path.join(
+            mkdtempSync(path.join(os.tmpdir(), "impactwave-clone-")),
+            "checkout"
+        );
+        git(os.tmpdir(), "clone", "-q", origin.dir, cloneDir);
+
+        const detected = await detectBaseBranch(simpleGit(cloneDir));
+
+        // "release/2.0" would lose the remote and its slash; the last path
+        // segment ("2.0") resolves to nothing at all.
+        assert.equal(detected, "origin/release/2.0");
+
+        // CI checks out a working branch and may keep no local base branch.
+        git(cloneDir, "checkout", "-q", "-b", "work");
+        git(cloneDir, "branch", "-q", "-D", "release/2.0");
+
+        assert.equal(
+            await branchExists(simpleGit(cloneDir), detected!),
+            true,
+            "the detected ref must exist without a local branch"
+        );
     });
 });
