@@ -133,7 +133,11 @@ export async function branchExists(git: SimpleGit, ref: string) {
 /**
  * Returns the set of line numbers modified in a file relative to the base branch.
  *
- * Line numbers refer to the file at `head`.
+ * Line numbers refer to the file at `head`. Removals have no line of their
+ * own there, so they are recorded at the position their code used to
+ * occupy: otherwise a change that only deletes code (a dropped validation,
+ * a removed branch) marked no symbol at all and its whole impact went
+ * unreported.
  */
 export async function getModifiedLines(
     git: SimpleGit,
@@ -159,15 +163,23 @@ export async function getModifiedLines(
                 if (match && match[1]) {
                     currentLine = parseInt(match[1], 10);
                 }
-            } else if (line.startsWith("+") && !line.startsWith("+++")) {
+                continue;
+            }
+
+            // File headers look like content lines; they are not.
+            if (line.startsWith("+++") || line.startsWith("---")) continue;
+
+            if (line.startsWith("+")) {
                 // Added or modified line
                 modifiedLines.add(currentLine);
                 currentLine++;
-            } else if (line.startsWith(" ") && !line.startsWith("---")) {
+            } else if (line.startsWith("-")) {
+                // Removed line: mark the line that now sits in its place.
+                modifiedLines.add(currentLine);
+            } else if (line.startsWith(" ")) {
                 // Context line (no change)
                 currentLine++;
             }
-            // Lines starting with '-' do not advance the new-file counter
         }
     } catch (error) {
         // If the diff fails, return an empty set by safety

@@ -56,3 +56,41 @@ describe("changed files: renames", () => {
         assert.deepEqual([...lines], [2], "only the edited line changed");
     });
 });
+
+describe("changed lines: deletions", () => {
+    let repo: GitRepoFixture;
+
+    after(() => repo?.cleanup());
+
+    it("marks the position of code removed by the change", async () => {
+        const validator = [
+            "export function valida(x: number): number {",
+            '    if (x < 0) throw new Error("negativo");',
+            '    if (x > 100) throw new Error("grande");',
+            "    return x;",
+            "}",
+            ""
+        ].join("\n");
+
+        repo = createGitRepo({ "core.ts": validator });
+
+        writeFileSync(
+            path.join(repo.dir, "core.ts"),
+            validator.replace('    if (x > 100) throw new Error("grande");\n', "")
+        );
+        git(repo.dir, "add", "-A");
+        git(repo.dir, "commit", "-q", "-m", "drop a validation");
+
+        const files = await getChangedFiles(simpleGit(repo.dir), "HEAD~1", "HEAD");
+        const lines = await getModifiedLines(
+            simpleGit(repo.dir),
+            "HEAD~1",
+            "HEAD",
+            files[0]!
+        );
+
+        // Line 3 of the new file ("return x;") now occupies the place of the
+        // removed validation, so the enclosing symbol is seen as modified.
+        assert.deepEqual([...lines], [3]);
+    });
+});
