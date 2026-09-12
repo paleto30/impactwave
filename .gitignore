@@ -1,2 +1,11 @@
 node_modules/
 dist/
+
+# Borradores académicos fuera del índice (informe de similitud institucional).
+# Se ignora ai-docs/ por defecto, para que ningún borrador se cuele por olvido.
+# Las reglas de agente son la excepción: AGENTS.md las declara project-owned y
+# versionadas, así que al añadir una regla nueva hay que sumarla aquí con "!".
+ai-docs/*
+!ai-docs/coding-principles.md
+!ai-docs/git-workflow-opencode.md
+propuesta124.md

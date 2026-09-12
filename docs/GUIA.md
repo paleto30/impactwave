@@ -227,6 +227,8 @@ Hay dos niveles de granularidad: `PaymentService` lista las referencias a la **c
 
 Este bloque mide **exposición potencial**, no uso real. Los dos mecanismos son complementarios y ambos entran en el score, pero por factores distintos: los consumidores reales del bloque anterior alimentan `callerImpact` (30 pts), y este grafo alimenta `affectedFiles` y `dependencyDepth` (35 pts). Dicho de otra forma: "quién ejecuta lo que cambiaste" y "cuánta superficie del proyecto cuelga de ese archivo" se puntúan por separado.
 
+> **Consecuencia práctica**: `affectedFiles` y `dependencyDepth` se calculan sobre cada archivo cambiado, sin condicionarse a que el cambio haya modificado algún símbolo exportado. Un cambio que no marca ningún símbolo —editar solo una línea de `import`, por ejemplo— sigue acumulando esos puntos. Es deliberado: si el cambio no se puede atribuir a un símbolo pero el archivo es central, el grafo es lo único que lo advierte.
+
 > **Nota sobre ciclos**: si dos archivos se importan mutuamente (ej. un controller que importa el service para inyectarlo, y el service que importa DTOs/interfaces declarados dentro del controller), cada tarjeta listará a la otra en su blast radius — ambas entradas son correctas. Para eliminar ese ruido, extrae los tipos compartidos a un archivo propio (ej. `withdraws.dto.ts`).
 
 ```

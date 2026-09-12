@@ -14,7 +14,9 @@ export function classifyRisk(score: number): RiskLevel {
  *
  * Each factor contributes points proportional to its saturation against a
  * reference threshold, capped by its weight. Weights are configurable and
- * must add up to 100.
+ * do NOT have to add up to 100: parseRiskWeights validates only that the
+ * keys are known and the values finite numbers, and the total is capped at
+ * MAX_SCORE.
  *
  *   - callerImpact: direct consumers of modified symbols (threshold 10).
  *     Legacy mode: test files count as consumers. Split mode (only when
