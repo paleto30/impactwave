@@ -39,13 +39,14 @@ se retoman cuando el núcleo pase la auditoría de v1.2.0:
 
 ## Entregado
 
-- **Sin publicar**: corrección de bugs del prototipo y cierre de alcance —
+- **v1.3.0**: corrección de bugs del prototipo y cierre de alcance —
   clasificación de consumidores por AST (los imports multilínea dejan de
   contar como uso real), renombrados diffeados contra su contenido anterior,
   detección de cambios que solo borran código, rama base detectada como ref
   remota (`origin/release/2.0`), JavaScript fuera de alcance con advertencia
   explícita en vez de crash, y razones de riesgo que suman exactamente el
-  score. Calibración remedida (`docs/RISK_CALIBRATION.md`).
+  score. Calibración remedida (`docs/RISK_CALIBRATION.md`) y ficha técnica del
+  motor verificada contra el código (`docs/CAPABILITIES.md`).
 
 - **v1.2.0**: precisión del núcleo — imports dinámicos (`import()`/`require()`
   con argumento estático) crean aristas en el grafo y lo no resoluble se
