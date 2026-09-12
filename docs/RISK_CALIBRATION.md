@@ -50,11 +50,24 @@ las mediciones son comparables entre sí y con el código de hoy.
   añadidos y borrados. Sobreestimar el riesgo de un cambio inocuo es el error
   aceptable; el inverso (callar un cambio real) no lo es.
 
-## Nota de versión
+## Vigencia de la medición
 
-Esta tabla se remidió por completo tras la corrección de precisión del
-núcleo (ver `CHANGELOG.md`, sección *Unreleased*). Frente a la medición
-anterior solo cambian dos filas: `dc26015` (8 → 40, por el borrado que antes
-era invisible) y `69bf6ae` (84 → 85, por el redondeo por factor). El resto
-de scores es idéntico, lo que confirma que las correcciones no desplazaron
-la calibración general del modelo.
+- **Motor con el que se midió**: estado de `master` en el commit `8ddac8b`,
+  es decir la versión 1.2.0 del paquete más las correcciones de precisión
+  registradas en `CHANGELOG.md` bajo *Unreleased* (detección de cambios que
+  solo borran líneas, clasificación del cableado por AST, renombrados
+  comparados contra su contenido anterior y redondeo por factor).
+- **Fecha**: septiembre de 2026.
+- **Reproducción**: cada commit se materializa en un `git worktree` propio y
+  se analiza con `analyze -b <commit>~1` usando ese motor, de modo que la
+  medición no depende del estado del working tree ni del orden de ejecución.
+- **Cuándo deja de ser válida**: cualquier cambio en los pesos, los umbrales,
+  los niveles o el mecanismo de detección de símbolos invalida esta tabla. En
+  ese caso hay que volver a medir con el mismo procedimiento, nunca ajustar
+  los valores a mano.
+
+Frente a la medición anterior a esas correcciones solo cambiaron dos filas:
+`dc26015` (8 → 40, por el borrado que antes era invisible) y `69bf6ae`
+(84 → 85, por el redondeo por factor). El resto de los puntajes es idéntico,
+lo que indica que las correcciones no desplazaron la calibración general del
+modelo.
