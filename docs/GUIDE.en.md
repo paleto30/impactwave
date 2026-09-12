@@ -225,6 +225,8 @@ Two granularity levels are shown: `PaymentService` lists references to the **cla
 
 This block measures **potential exposure**, not real usage. Both mechanisms are complementary and both feed the score, through different factors: the real consumers of the previous block feed `callerImpact` (30 pts), and this graph feeds `affectedFiles` and `dependencyDepth` (35 pts). In other words: "who executes what you changed" and "how much of the project hangs off that file" are scored separately.
 
+> **Practical consequence**: `affectedFiles` and `dependencyDepth` are computed per changed file, without requiring that the change modified any exported symbol. A change that marks no symbol — editing a single `import` line, say — still accumulates those points. This is deliberate: when a change cannot be attributed to a symbol but the file is central, the graph is the only thing that flags it.
+
 > **Note on cycles**: if two files import each other (e.g. a controller importing the service for injection, and the service importing DTOs/interfaces declared inside the controller), each card will list the other in its blast radius — both entries are correct. To remove that noise, extract shared types into their own file (e.g. `withdraws.dto.ts`).
 
 ```
