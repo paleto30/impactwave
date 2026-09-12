@@ -197,3 +197,45 @@ describe("CLI integration: modified class methods", () => {
         assert.doesNotMatch(output, /logInterno/);
     });
 });
+
+describe("CLI integration: deletion-only changes", () => {
+    let repo: GitRepoFixture;
+
+    before(() => {
+        // A change that only removes code: the symbol keeps its name and
+        // signature, but its behavior changed for every consumer.
+        const validator = [
+            "export function valida(x: number): number {",
+            '    if (x < 0) throw new Error("negativo");',
+            '    if (x > 100) throw new Error("grande");',
+            "    return x;",
+            "}",
+            ""
+        ].join("\n");
+
+        repo = createGitRepo({
+            "core.ts": validator,
+            "app.ts": 'import { valida } from "./core.js";\n\nexport const r = valida(5);\n',
+            "tsconfig.json": '{ "compilerOptions": { "target": "ES2020", "module": "nodenext", "moduleResolution": "nodenext" } }\n'
+        });
+
+        writeFileSync(
+            path.join(repo.dir, "core.ts"),
+            validator.replace('    if (x > 100) throw new Error("grande");\n', "")
+        );
+        git(repo.dir, "add", "-A");
+        git(repo.dir, "commit", "-q", "-m", "drop a validation");
+    });
+
+    after(() => repo.cleanup());
+
+    it("marks the symbol and reports its consumers", () => {
+        const result = runCli(repo.dir, ["analyze", "-b", "HEAD~1"]);
+        assert.equal(result.status, 0, result.stderr);
+
+        const output = result.stdout;
+        assert.match(output, /✏️\s+valida \(function\) \(1 line modified\)/);
+        assert.match(output, /Target Symbol: valida/);
+        assert.match(output, /Affected File: app\.ts/);
+    });
+});

@@ -63,6 +63,8 @@ export interface ConsumerUsageJson {
 export interface ChangedFileReport {
     path: string;
     status: "added" | "modified" | "deleted" | string;
+    /** Original path of a renamed file (renames only). */
+    previousPath?: string;
     exportedSymbols?: ExportedSymbolJson[];
     dependents: string[];
     transitive?: {

@@ -37,7 +37,8 @@
             "enum": [
               "base-branch-fallback",
               "unsupported-tsconfig-option",
-              "unresolved-dynamic-imports"
+              "unresolved-dynamic-imports",
+              "unsupported-source-files"
             ],
             "description": "Stable machine-readable identifier"
           },
@@ -166,6 +167,10 @@
       "properties": {
         "path": { "type": "string" },
         "status": { "enum": ["added", "modified", "deleted"] },
+        "previousPath": {
+          "type": "string",
+          "description": "Original path of a renamed file; renames are reported as a modification of their new path"
+        },
         "exportedSymbols": {
           "type": "array",
           "items": { "$ref": "#/$defs/exportedSymbol" },

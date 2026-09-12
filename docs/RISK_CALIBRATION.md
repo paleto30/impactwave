@@ -14,17 +14,20 @@ Referencia empírica para ajustar `DEFAULT_RISK_WEIGHTS` en
 
 ## Medición — commits reales del propio proyecto (dogfooding)
 
-Medido con `analyze -b HEAD~1` sobre cada commit, con los pesos por defecto:
+10 commits del historial del repositorio, con los pesos por defecto. Método
+reproducible: cada commit se materializa en un `git worktree` propio y se
+analiza con el motor actual mediante `analyze -b <commit>~1`, de modo que
+las mediciones son comparables entre sí y con el código de hoy.
 
 | Commit | Tipo | Archivos | Score | Nivel |
 |---|---|---|---|---|
 | `77ef87e` | feature (formato de reporte) | 1 | 10 | LOW |
-| `dc26015` | test | 1 | 8 | LOW |
-| `8d1f131` | test | 2 | 12 | LOW |
+| `dc26015` | test (borra un comentario dentro de un enum muy consumido) | 1 | 40 | MEDIUM |
+| `8d1f131` | test | 2 | 13 | LOW |
 | `b91a5bd` | feature (presentación visual) | 1 | 23 | LOW |
 | `f7762c0` | refactor (símbolos usados) | 4 | 43 | MEDIUM |
 | `bb28a6c` | test (toca símbolo con 4 consumidores sin tests) | 1 | 40 | MEDIUM |
-| `69bf6ae` | scaffolding masivo (MVP completo) | 32 | 84 | CRITICAL |
+| `69bf6ae` | scaffolding masivo (MVP completo) | 32 | 85 | CRITICAL |
 | `36f637e`, `8d53665`, `c05caa8` | docs / config | 3-5 | 0 | LOW |
 
 ## Conclusiones
@@ -36,4 +39,22 @@ Medido con `analyze -b HEAD~1` sobre cada commit, con los pesos por defecto:
   4 archivos sin tests da 40 pts (MEDIUM) — 12 pts de consumidores + 20 pts
   de test gaps. Si un commit típico del proyecto supera esto de forma
   recurrente, revisar primero la cobertura de tests (no los pesos).
-- Nota: los commits de solo docs/config dan 0 (ningún símbolo modificado).
+- Los commits de solo docs/config dan 0: ningún archivo TypeScript cambia,
+  así que no hay símbolos ni grafo que evaluar.
+- **`dc26015` es el caso límite del modelo, y conviene citarlo como tal.**
+  El commit solo borra un comentario dentro de `enum FileStatus`, un símbolo
+  con 4 consumidores y 2 áreas afectadas sin tests: el score sube a 40
+  (MEDIUM) por un cambio sin efecto en tiempo de ejecución. Es la limitación
+  de granularidad documentada en `docs/GUIA.md` §5.3 — la intersección de
+  líneas no distingue código de comentarios — y aplica por igual a comentarios
+  añadidos y borrados. Sobreestimar el riesgo de un cambio inocuo es el error
+  aceptable; el inverso (callar un cambio real) no lo es.
+
+## Nota de versión
+
+Esta tabla se remidió por completo tras la corrección de precisión del
+núcleo (ver `CHANGELOG.md`, sección *Unreleased*). Frente a la medición
+anterior solo cambian dos filas: `dc26015` (8 → 40, por el borrado que antes
+era invisible) y `69bf6ae` (84 → 85, por el redondeo por factor). El resto
+de scores es idéntico, lo que confirma que las correcciones no desplazaron
+la calibración general del modelo.

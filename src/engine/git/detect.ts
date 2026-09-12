@@ -2,6 +2,9 @@ import { simpleGit, type SimpleGit } from "simple-git";
 import { FileStatus } from "./file-status.js";
 import type { ChangedFile } from "./changed-file.interface.js";
 
+/** Prefix of a remote-tracking ref: refs/remotes/origin/main. */
+const REMOTE_REF_PREFIX = "refs/remotes/";
+
 export async function detectRepo(
     projectRoot: string = process.cwd()
 ): Promise<SimpleGit | null> {
@@ -9,34 +12,109 @@ export async function detectRepo(
 
     const isRepo = await git.checkIsRepo();
 
-    if (!isRepo) {
-        console.log("This directory is not a Git repository.");
+    // Presentation-free by contract: the caller turns this null into an
+    // AnalyzeError and decides where the message goes. Printing here leaked
+    // text into stdout, which --json reserves for the JSON document.
+    return isRepo ? git : null;
+}
+
+/**
+ * Resolves the ref that origin/HEAD points at, keeping the remote prefix.
+ *
+ * Returning the remote-tracking name ("origin/main") instead of the last
+ * path segment matters twice: branch names containing slashes
+ * ("release/2.0") survive intact, and the ref still resolves in CI clones
+ * that check out a single branch and never create the local one.
+ */
+async function detectRemoteHeadBranch(git: SimpleGit): Promise<string | null> {
+    try {
+        const ref = (
+            await git.raw(["symbolic-ref", "refs/remotes/origin/HEAD"])
+        ).trim();
+
+        return ref.startsWith(REMOTE_REF_PREFIX)
+            ? ref.slice(REMOTE_REF_PREFIX.length)
+            : null;
+    } catch {
         return null;
     }
+}
 
-    return git;
+async function detectLocalBaseBranch(git: SimpleGit): Promise<string | null> {
+    try {
+        const branchSummary = await git.branchLocal();
+
+        if (branchSummary.all.includes("main")) return "main";
+        if (branchSummary.all.includes("master")) return "master";
+
+        return null;
+    } catch {
+        // Repository without branches yet (no commits): the caller falls
+        // back to HEAD~1 with an explicit warning.
+        return null;
+    }
 }
 
 export async function detectBaseBranch(git: SimpleGit): Promise<string | null> {
-    try {
-        const remoteHead = await git.raw([
-            "symbolic-ref",
-            "refs/remotes/origin/HEAD"
-        ]);
+    return (await detectRemoteHeadBranch(git)) ?? (await detectLocalBaseBranch(git));
+}
 
-        // refs/remotes/origin/main -> main
-        return remoteHead.trim().split("/").pop() ?? null;
+/**
+ * Parses one `git diff --name-status` line into a changed file.
+ *
+ * Renames and copies carry three columns ("R100\told\tnew"). A rename is
+ * reported as a single modification of its new path, remembering where it
+ * came from: splitting it into delete + add made the new path look like a
+ * brand-new file whose every line was modified, marking every symbol in it
+ * as touched. Unknown statuses (unmerged entries during a conflict) are
+ * skipped instead of aborting the analysis.
+ */
+function parseChangedFileLine(line: string): ChangedFile | null {
+    const parts = line.split("\t");
+    const status = parts[0];
 
-    } catch (error) {
-        const branchSummary = await git.branchLocal();
+    if (!status) {
+        throw new Error(`Invalid git diff line: ${line}`);
+    }
 
-        if (branchSummary.all.includes("main"))
-            return "main";
+    if (status.startsWith("R") || status.startsWith("C")) {
+        const [, oldPath, newPath] = parts;
 
-        if (branchSummary.all.includes("master"))
-            return "master";
+        if (!oldPath || !newPath) {
+            throw new Error(`Invalid rename line: ${line}`);
+        }
 
-        return null;
+        // A copy leaves its source untouched, so only the new path is new.
+        return status.startsWith("C")
+            ? { path: newPath, status: FileStatus.Added }
+            : {
+                path: newPath,
+                status: FileStatus.Modified,
+                previousPath: oldPath
+            };
+    }
+
+    const [, path] = parts;
+
+    if (!path) {
+        throw new Error(`Invalid git diff line: ${line}`);
+    }
+
+    switch (status) {
+        case "A":
+            return { path, status: FileStatus.Added };
+
+        // A type change (file <-> symlink) still changes the content that
+        // the analysis reads, so it is a modification like any other.
+        case "M":
+        case "T":
+            return { path, status: FileStatus.Modified };
+
+        case "D":
+            return { path, status: FileStatus.Deleted };
+
+        default:
+            return null;
     }
 }
 
@@ -55,49 +133,8 @@ export async function getChangedFiles(
         .filter((line) => line.trim() !== "");
 
     for (const line of lines) {
-        const parts = line.split("\t");
-        const status = parts[0];
-
-        if (!status) {
-            throw new Error(`Invalid git diff line: ${line}`);
-        }
-
-        // Renames: "R100\told/path.ts\tnew/path.ts" -> 3 columns
-        if (status.startsWith("R")) {
-            const [, oldPath, newPath] = parts;
-
-            if (!oldPath || !newPath) {
-                throw new Error(`Invalid rename line: ${line}`);
-            }
-
-            changedFiles.push({ path: oldPath, status: FileStatus.Deleted });
-            changedFiles.push({ path: newPath, status: FileStatus.Added });
-            continue;
-        }
-
-        // Normal cases: "M\tpath.ts" -> 2 columns
-        const [, path] = parts;
-
-        if (!path) {
-            throw new Error(`Invalid git diff line: ${line}`);
-        }
-
-        switch (status) {
-            case "A":
-                changedFiles.push({ path, status: FileStatus.Added });
-                break;
-
-            case "M":
-                changedFiles.push({ path, status: FileStatus.Modified });
-                break;
-
-            case "D":
-                changedFiles.push({ path, status: FileStatus.Deleted });
-                break;
-
-            default:
-                throw new Error(`Unsupported git status: ${status}`);
-        }
+        const changedFile = parseChangedFileLine(line);
+        if (changedFile) changedFiles.push(changedFile);
     }
 
     return changedFiles;
@@ -114,12 +151,26 @@ export async function branchExists(git: SimpleGit, ref: string) {
 
 /**
  * Returns the set of line numbers modified in a file relative to the base branch.
+ *
+ * Line numbers refer to the file at `head`. Removals have no line of their
+ * own there, so they are recorded at the position their code used to
+ * occupy: otherwise a change that only deletes code (a dropped validation,
+ * a removed branch) marked no symbol at all and its whole impact went
+ * unreported.
  */
-export async function getModifiedLines(git: SimpleGit, base: string, head: string, filePath: string): Promise<Set<number>> {
+export async function getModifiedLines(
+    git: SimpleGit,
+    base: string,
+    head: string,
+    file: ChangedFile
+): Promise<Set<number>> {
     const modifiedLines = new Set<number>();
+    const paths = file.previousPath ? [file.previousPath, file.path] : [file.path];
+
     try {
-        // Get the unified diff for the specific file
-        const diff = await git.diff([base, head, "--", filePath]);
+        // -M plus both paths so a renamed file diffs against its previous
+        // content instead of reporting every line as added.
+        const diff = await git.diff([base, head, "-M", "--", ...paths]);
         const lines = diff.split("\n");
 
         let currentLine = 0;
@@ -131,15 +182,23 @@ export async function getModifiedLines(git: SimpleGit, base: string, head: strin
                 if (match && match[1]) {
                     currentLine = parseInt(match[1], 10);
                 }
-            } else if (line.startsWith("+") && !line.startsWith("+++")) {
+                continue;
+            }
+
+            // File headers look like content lines; they are not.
+            if (line.startsWith("+++") || line.startsWith("---")) continue;
+
+            if (line.startsWith("+")) {
                 // Added or modified line
                 modifiedLines.add(currentLine);
                 currentLine++;
-            } else if (line.startsWith(" ") && !line.startsWith("---")) {
+            } else if (line.startsWith("-")) {
+                // Removed line: mark the line that now sits in its place.
+                modifiedLines.add(currentLine);
+            } else if (line.startsWith(" ")) {
                 // Context line (no change)
                 currentLine++;
             }
-            // Lines starting with '-' do not advance the new-file counter
         }
     } catch (error) {
         // If the diff fails, return an empty set by safety

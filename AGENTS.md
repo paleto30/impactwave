@@ -5,9 +5,18 @@ Instrucciones obligatorias para agentes de código (OpenCode) que trabajen en es
 ## Proyecto
 
 **impactwave**: CLI en TypeScript (ESM, Node >= 22.12) que analiza el *blast radius*
-de cambios de Git sobre proyectos TypeScript/JavaScript: detecta qué símbolos
+de cambios de Git sobre proyectos TypeScript: detecta qué símbolos
 exportados modifica un cambio, quién los consume, qué tests los cubren y asigna
 un puntaje de riesgo determinista antes del merge.
+
+**Alcance (cerrado).** TypeScript (`.ts`, `.tsx`, `.mts`, `.cts`), cambios ya
+commiteados e imports relativos. JavaScript y los demás lenguajes están fuera
+de alcance **por decisión**: se omiten con la advertencia
+`unsupported-source-files` en vez de analizarse a medias. Este es un prototipo:
+antes de implementar cualquier cosa que amplíe el alcance, confirmarlo con el
+usuario. La definición completa vive en [`README.md`](README.md#alcance),
+[`docs/GUIA.md`](docs/GUIA.md#5-alcance-y-limitaciones) y
+[`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 - Dependencias clave: `commander` (CLI), `ts-morph` (parsing AST), `simple-git` (Git).
 - TypeScript estricto (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`,
@@ -136,7 +145,9 @@ src/
 ├── engine/             # Núcleo: análisis de impacto (sin conocer la consola)
 │   ├── analyze.ts      #   Orquestación del análisis completo
 │   ├── assessment.ts   #   Evaluación/agregación del resultado final
-│   ├── analyzer/       #   Impacto por símbolo exportado (symbol-analyzer, usage-filter)
+│   ├── analyzer/       #   Impacto por símbolo exportado (symbol-analyzer) y
+│   │                   #   clasificación AST de referencias: uso real vs
+│   │                   #   cableado de contrato (usage-filter)
 │   ├── git/            #   Detección de archivos cambiados vía Git (detect, file-status)
 │   ├── graph/          #   Grafo de dependencias e impacto transitivo
 │   ├── parser/         #   Parsing AST con ts-morph

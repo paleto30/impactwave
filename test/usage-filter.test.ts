@@ -1,74 +1,98 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
-import { isImportOnlyUsage } from "../src/engine/analyzer/usage-filter.js";
-import { getProject } from "../src/engine/project.js";
 import { SymbolAnalyzer } from "../src/engine/analyzer/symbol-analyzer.js";
+import type { SymbolImpact } from "../src/engine/analyzer/symbol-impact.interface.js";
 
+const SHAPES = path.resolve("test/fixtures/import-shapes");
 const BARREL = path.resolve("test/fixtures/barrel-exports");
 
-describe("import-only usage filter", () => {
-    it("keeps treating import statements as passive wiring", () => {
-        assert.ok(isImportOnlyUsage('import { PaymentService } from "./PaymentService.js";'));
-        assert.ok(isImportOnlyUsage('import type { Foo } from "./foo.js";'));
-        assert.ok(isImportOnlyUsage('import "./polyfills.js";'));
-        assert.ok(isImportOnlyUsage('import * as payment from "./payment.js"'));
-    });
+type Consumer = SymbolImpact["consumers"][number];
 
-    it("treats re-exports as passive wiring (contract pass-through)", () => {
-        assert.ok(isImportOnlyUsage('export { PaymentService } from "./PaymentService.js";'));
-        assert.ok(
-            isImportOnlyUsage('export { PaymentService as Checkout } from "./PaymentService.js";'),
-            "renamed re-export"
-        );
-        assert.ok(isImportOnlyUsage('export * from "./payment/index.js";'));
-        assert.ok(isImportOnlyUsage('export * as PaymentNS from "./payment.js";'));
-        assert.ok(
-            isImportOnlyUsage('export { default as PaymentService } from "./PaymentService.js";'),
-            "default re-export"
-        );
-    });
+function consumersOf(
+    projectRoot: string,
+    filePath: string,
+    symbolName: string
+): Consumer[] {
+    const analyzer = new SymbolAnalyzer(projectRoot);
+    return analyzer.analyzeSymbolImpact(filePath, [symbolName])[0]?.consumers ?? [];
+}
 
-    it("treats bare export specifier lists as passive wiring", () => {
-        // import { X } from "./y"; export { X };  -> the export line wires,
-        // it executes nothing of X
-        assert.ok(isImportOnlyUsage("export { PaymentService };"));
-        assert.ok(isImportOnlyUsage("export { PaymentService as default };"));
-    });
+function inFile(consumers: Consumer[], filePath: string): Consumer[] {
+    return consumers.filter(consumer => consumer.filePath === filePath);
+}
 
-    it("does not swallow genuinely active usages", () => {
-        assert.ok(!isImportOnlyUsage("const total = paymentService.calculate(amount);"));
-        assert.ok(!isImportOnlyUsage("new PaymentService(card).charge(order);"));
-        assert.ok(!isImportOnlyUsage("export const factory = makeService(PaymentService);"));
-        assert.ok(!isImportOnlyUsage("export default buildGateway(PaymentService)"), 
-            "an export whose initializer USES the symbol is active");
-    });
-
-    it("does not classify dynamic import calls as passive", () => {
-        // A dynamic import is a real module load on that line
-        assert.ok(!isImportOnlyUsage('const mod = await import("./b");'));
-        assert.ok(!isImportOnlyUsage('import("./b").then(m => m.b());'));
-    });
-});
-
-describe("barrel re-exports end up flagged as contract wiring", () => {
-    it("classifies the index.ts reference to a re-exported symbol as importOnly", () => {
-        const projectRoot = BARREL;
-        const analyzer = new SymbolAnalyzer(projectRoot);
-        getProject(projectRoot);
-
-        const impacts = analyzer.analyzeSymbolImpact(
-            "payment/payment.service.ts",
-            ["PaymentService"]
+describe("contract wiring classification (AST based)", () => {
+    it("classifies a multi-line import as wiring, not as a consumer", () => {
+        // The reference lands on a line that reads just "PaymentService,":
+        // no line-based rule can tell it is part of an import.
+        const wiring = inFile(
+            consumersOf(SHAPES, "service.ts", "PaymentService"),
+            "multiline-import-only.ts"
         );
 
-        const impact = impacts[0];
-        assert.ok(impact, "the symbol must have an impact entry");
-        const indexConsumer = impact.consumers.find(c => c.filePath === "index.ts");
-        assert.ok(indexConsumer, "the barrel must appear among the consumers");
+        assert.equal(wiring.length, 1);
+        assert.equal(wiring[0]?.importOnly, true);
+        assert.equal(wiring[0]?.snippet, "PaymentService,");
+    });
+
+    it("still reports the active usage when the import spans several lines", () => {
+        const consumers = inFile(
+            consumersOf(SHAPES, "service.ts", "PaymentService"),
+            "multiline-active.ts"
+        );
+
+        const active = consumers.filter(consumer => !consumer.importOnly);
+        assert.equal(active.length, 1, "the constructor call is a real usage");
+        assert.match(active[0]!.snippet, /new PaymentService\(\)/);
         assert.ok(
-            isImportOnlyUsage(indexConsumer.snippet),
-            `re-export line must be wiring: ${indexConsumer.snippet}`
+            consumers.some(consumer => consumer.importOnly),
+            "its multi-line import is still wiring"
+        );
+    });
+
+    it("classifies a multi-line re-export as wiring", () => {
+        const wiring = inFile(
+            consumersOf(SHAPES, "service.ts", "PaymentService"),
+            "multiline-reexport.ts"
+        );
+
+        assert.equal(wiring.length, 1);
+        assert.equal(wiring[0]?.importOnly, true);
+    });
+
+    it("keeps dynamic imports as active usage", () => {
+        const consumers = inFile(
+            consumersOf(SHAPES, "service.ts", "formatAmount"),
+            "dynamic-consumer.ts"
+        );
+
+        assert.ok(consumers.length > 0, "the lazy module call must be seen");
+        assert.ok(
+            consumers.every(consumer => !consumer.importOnly),
+            "a dynamic load executes the module: it is not wiring"
+        );
+    });
+
+    it("classifies single-line barrel re-exports as wiring", () => {
+        const barrel = inFile(
+            consumersOf(BARREL, "payment/payment.service.ts", "PaymentService"),
+            "index.ts"
+        );
+
+        assert.equal(barrel.length, 1);
+        assert.equal(barrel[0]?.importOnly, true);
+    });
+
+    it("keeps real consumers behind a barrel active", () => {
+        const controller = inFile(
+            consumersOf(BARREL, "payment/payment.service.ts", "PaymentService"),
+            "checkout.controller.ts"
+        );
+
+        assert.ok(
+            controller.some(consumer => !consumer.importOnly),
+            "the controller instantiates the service"
         );
     });
 });

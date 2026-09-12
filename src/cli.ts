@@ -94,7 +94,7 @@ Examples:
   # Emphasize test coverage gaps in the score
   $ impactwave --risk-weights '{"callerImpact":30,"testGaps":35}'
 
-Full guide: https://github.com/paleto30/impactwave/blob/main/docs/GUIA.md`)
+Full guide: https://github.com/paleto30/impactwave/blob/master/docs/GUIA.md`)
     .action(async (options) => {
         try {
             const result = await analyzeProject({

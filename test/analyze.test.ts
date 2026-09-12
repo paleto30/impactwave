@@ -187,3 +187,43 @@ describe("--json CLI output", () => {
         }
     });
 });
+
+describe("language scope", () => {
+    let repo: GitRepoFixture;
+
+    before(() => {
+        repo = createGitRepo({
+            "math.js": "export function suma(a, b) {\n    return a + b;\n}\n",
+            "app.js": 'import { suma } from "./math.js";\n\nexport const r = suma(1, 2);\n',
+            "tsconfig.json":
+                '{\n  "compilerOptions": {\n    "module": "nodenext",\n    "target": "es2020"\n  }\n}\n'
+        });
+        writeFileSync(
+            path.join(repo.dir, "math.js"),
+            "export function suma(a, b) {\n    return a + b + 1;\n}\n"
+        );
+        git(repo.dir, "add", "-A");
+        git(repo.dir, "commit", "-q", "-m", "change suma");
+    });
+
+    after(() => repo.cleanup());
+
+    it("skips JavaScript files with a warning instead of crashing on them", async () => {
+        // Analyzing .js used to die inside findReferences; with allowJs it
+        // silently reported the change as isolated. Neither is acceptable:
+        // out of scope must be visible.
+        const result = await analyzeProject({
+            projectRoot: repo.dir,
+            version: "0.0.0-test",
+            base: "HEAD~1"
+        });
+
+        assert.equal(result.summary.skippedFiles, 1);
+        const warning = result.warnings.find(
+            w => w.code === "unsupported-source-files"
+        );
+        assert.ok(warning, "the skipped language must be reported");
+        assert.match(warning.message, /math\.js/);
+        assert.match(warning.message, /TypeScript only/);
+    });
+});

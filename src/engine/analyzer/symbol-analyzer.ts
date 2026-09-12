@@ -1,6 +1,7 @@
 import path from "node:path";
 import { type Project, type SourceFile, type Node, type ReferencedSymbol, InterfaceDeclaration, TypeAliasDeclaration, ClassDeclaration, FunctionDeclaration, EnumDeclaration, VariableDeclaration, Scope } from "ts-morph";
 import { getProject } from "../project.js";
+import { isImportOnlyReference } from "./usage-filter.js";
 import type { SymbolImpact } from "./symbol-impact.interface.js";
 import type { FileAnalysis } from "../parser/file-analysis.interface.js";
 
@@ -189,7 +190,7 @@ export class SymbolAnalyzer {
      * non-definition reference, deduplicated by position.
      */
     private collectConsumers(referenceable: ReferenceableNode): SymbolImpact["consumers"] {
-        const consumersMap = new Map<string, { filePath: string; line: number; snippet: string }>();
+        const consumersMap = new Map<string, SymbolImpact["consumers"][number]>();
 
         for (const ref of referenceable.findReferences()) {
             for (const refNode of ref.getReferences()) {
@@ -198,8 +199,8 @@ export class SymbolAnalyzer {
 
                 if (refNode.isDefinition()) continue;
 
-                const pos = refNode.getNode().getStart();
-                const line = refSourceFile.getLineAndColumnAtPos(pos).line;
+                const node = refNode.getNode();
+                const line = refSourceFile.getLineAndColumnAtPos(node.getStart()).line;
                 const snippet = refSourceFile.getFullText().split('\n')[line - 1]?.trim() || '';
 
                 const key = `${refFilePath}:${line}`;
@@ -207,7 +208,8 @@ export class SymbolAnalyzer {
                     consumersMap.set(key, {
                         filePath: refFilePath,
                         line,
-                        snippet
+                        snippet,
+                        importOnly: isImportOnlyReference(node)
                     });
                 }
             }

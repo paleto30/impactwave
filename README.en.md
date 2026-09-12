@@ -2,7 +2,7 @@
 
 > **English | [Español](README.md)**
 
-**Blast radius analyzer for TypeScript and JavaScript.**
+**Blast radius analyzer for TypeScript.**
 
 ImpactWave is a CLI that analyzes your Git changes before merging and answers one question:
 
@@ -37,7 +37,7 @@ npm install -g impactwave   # or run it without installing:
 npx impactwave
 ```
 
-Requirements: Node ≥ 22.12, a local Git repository and a TypeScript/JavaScript project.
+Requirements: Node ≥ 22.12, a local Git repository and a TypeScript project.
 
 ## Usage
 
@@ -112,7 +112,7 @@ impactwave analyze --json -b main | jq -e '.risk.level | inside("LOW|MEDIUM")' >
 ## How it works
 
 1. **Git**: detects the repository, the base branch and changed files (A/M/D).
-2. **AST**: ts-morph extracts exports and imports of changed files, using a single project built from your root `tsconfig.json`'s `compilerOptions` plus files discovered by its own tree walk (tolerant of unreadable directories).
+2. **AST**: ts-morph extracts exports and imports of changed files, using a single project built from your root `tsconfig.json`'s `compilerOptions` plus the TypeScript files (`.ts`, `.tsx`, `.mts`, `.cts`) discovered by its own tree walk (tolerant of unreadable directories).
 3. **Modified symbols**: intersects each exported symbol's line range with the diff lines.
 4. **Real consumers**: `findReferences` finds the active usages of each symbol (pure imports don't count as impact).
 5. **Dependency graph**: reverse and forward indexes of relative imports —including dynamic `import(...)`/`require(...)` loads with a static argument— + transitive traversal (BFS) with depth.
@@ -121,19 +121,22 @@ impactwave analyze --json -b main | jq -e '.risk.level | inside("LOW|MEDIUM")' >
 
 ## Risk model
 
-Five factors with saturation thresholds. Default weights (configurable with `--risk-weights`):
+Five factors with saturation thresholds, plus an optional one. Default weights (configurable with `--risk-weights`):
 
 | Factor | Weight | Signal |
 |---|---|---|
-| Caller impact | 30 | direct consumers of modified symbols (threshold 10) |
-| Affected files | 20 | transitively reached files (threshold 15) |
-| Dependency depth | 15 | maximum depth levels (threshold 4) |
-| Test gaps | 20 | share of affected areas without tests |
-| Change size | 15 | modified lines (threshold 200) |
+| `callerImpact` | 30 | direct consumers of modified symbols (threshold 10) |
+| `affectedFiles` | 20 | transitively reached files (threshold 15) |
+| `dependencyDepth` | 15 | maximum depth levels (threshold 4) |
+| `testGaps` | 20 | share of affected areas without tests |
+| `changeSize` | 15 | modified lines (threshold 200) |
+| `testCallerImpact` | — | optional: when set, test consumers leave `callerImpact` and saturate this weight instead (`0` exempts them from the score) |
 
 Levels: `0-25 LOW · 26-50 MEDIUM · 51-75 HIGH · 76-100 CRITICAL`.
 
-The factor names are the JSON keys of `--risk-weights` (all optional; omitted ones default to 0).
+The factor names are the JSON keys of `--risk-weights` (all optional; omitted ones default to 0). The points printed next to each reason add up exactly to the score, unless it saturates at 100.
+
+Two of the factors (`affectedFiles` and `dependencyDepth`, 35 points) are computed from the **static dependency graph** rather than from real consumers: they measure how much of the project is exposed to the changed file.
 
 ## The report
 
@@ -174,12 +177,33 @@ within a schema version only additive changes are allowed. Symbol usages
 travel unfiltered, flagged with `importOnly: true` when they are only
 contract wiring (`import`, re-exports).
 
+## Scope
+
+ImpactWave is a **prototype** with a deliberately bounded scope: it does one thing well and declares the rest out of scope instead of approximating it.
+
+**In scope:**
+
+- **TypeScript** projects: `.ts`, `.tsx`, `.mts`, `.cts`.
+- **Committed** changes, comparing `base..HEAD` in a local Git repository.
+- **Relative** intra-project imports, static and dynamic ones with a static argument.
+- Local analysis, no network: your code never leaves your machine.
+
+**Out of scope (by decision, not by omission):**
+
+- **JavaScript** (`.js`, `.jsx`, `.mjs`, `.cjs`). It is neither discovered nor parsed. When a change touches such files they are skipped and the report says so through the `unsupported-source-files` warning: a limited report is useful, one that looks complete without being so is dangerous.
+- Other languages.
+- Uncommitted working-tree changes.
+- `node_modules`, non-relative path aliases and monorepos with several tsconfigs (only the root one is used).
+- Semantic analysis of the change: the tool tells you *which* symbol changed and *who* uses it, not whether the change breaks the contract.
+
 ## Known limitations
 
-- Compares commits; uncommitted working-tree changes are not analyzed.
+- **"Modified symbol" granularity** is the intersection of the diff with the declaration's line range. A non-functional change (a comment, a reformat) inside that range marks the symbol as modified.
+- **Deleted files**: their symbols and consumers are not analyzed. Deleting a file others still import is not flagged.
+- **Renames** are reported as a modification of the new path (with `previousPath`), diffed against the previous content.
 - Test coverage is transitive: a test covers the files it reaches through the dependency graph within 4 hops (`DEFAULT_TEST_COVERAGE_DEPTH`, configurable per call), preventing a root-importing test from claiming coverage over the whole codebase.
-- The graph only considers relative imports (no `node_modules` or path aliases).
-- In monorepos with several tsconfigs, only the root one is used; source discovery walks the whole tree (skipping `node_modules`/`dist`/`build`, hidden and unreadable paths).
+- Dynamic imports whose argument is not static (template literals with variables, concatenation) cannot be resolved: they are recorded and surfaced through the `unresolved-dynamic-imports` warning.
+- Source discovery walks the whole tree, skipping `node_modules`/`dist`/`build`, hidden directories and symlinks. Directories without read permission (e.g. Docker's `pg_data`) are skipped; they never abort the analysis.
 
 ## Development
 
@@ -189,7 +213,7 @@ npm run build  # compile to dist/
 npm run dev    # run in development
 ```
 
-Fixtures in `test/fixtures/` validate the analysis against artificial projects: `simple-project` (A→B→C chain), `circular-dependencies` (X↔Y), `barrel-exports` (barrel re-exports) and `test-coverage` (services with and without tests).
+Fixtures in `test/fixtures/` validate the analysis against artificial projects: `simple-project` (A→B→C chain), `circular-dependencies` (X↔Y), `barrel-exports` (barrel re-exports), `test-coverage` and `test-coverage-transitive` (services with and without tests, long chains and cycles), `dynamic-imports` (resolvable and unresolvable dynamic loads) and `import-shapes` (multi-line imports and re-exports).
 
 To contribute: open an [issue](https://github.com/paleto30/impactwave/issues) or send a PR. Priorities and candidate improvements are documented in [docs/ROADMAP.md](docs/ROADMAP.md); the release history, in [CHANGELOG.md](CHANGELOG.md).
 

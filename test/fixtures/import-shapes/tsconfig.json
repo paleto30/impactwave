@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "es2020",
+    "strict": true,
+    "types": ["node"]
+  },
+  "include": ["*.ts"]
+}

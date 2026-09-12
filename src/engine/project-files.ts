@@ -8,7 +8,25 @@ import type { Project } from "ts-morph";
  */
 const SKIPPED_DIRECTORIES = new Set(["node_modules", "dist", "build"]);
 
-const TYPESCRIPT_FILE = /\.tsx?$/i;
+/**
+ * Analyzable source extensions — the single source of truth for the
+ * prototype's language scope: TypeScript only.
+ *
+ * JavaScript (.js/.jsx/.mjs/.cjs) is deliberately excluded. Half-supporting
+ * it was worse than not supporting it: the files never reached the graph, so
+ * their consumers and tests were invisible and a risky change was reported
+ * as isolated. Scope is documented in README.md and docs/GUIA.md §5.
+ */
+const TYPESCRIPT_FILE = /\.(?:tsx?|mts|cts)$/i;
+
+/**
+ * Whether a path is within the analyzable language scope. Callers outside
+ * the walk (changed-file filtering, test detection) reuse this instead of
+ * spelling the extension rule again.
+ */
+export function isAnalyzableSourceFile(filePath: string): boolean {
+    return TYPESCRIPT_FILE.test(filePath);
+}
 
 /**
  * Depth-first collection of TypeScript source files.

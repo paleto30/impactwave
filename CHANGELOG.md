@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Scope is now explicitly TypeScript only** (`.ts`, `.tsx`, `.mts`,
+  `.cts`). JavaScript was never really analyzed — its files never reached
+  the dependency graph — so it is documented as out of scope instead of
+  half-supported. `.mts`/`.cts`, which are TypeScript, are now discovered.
+- Consumers carry an `importOnly` flag computed when they are collected;
+  every later stage (risk, console, JSON) reads that one classification.
+- JSON output gains `changedFiles[].previousPath` for renames and the
+  `unsupported-source-files` warning code (both additive to schema v1).
+
+### Fixed
+
+- **Multi-line imports no longer count as real consumers**: contract wiring
+  is classified from the AST instead of from the text of the reference's
+  line. An import formatted across several lines put the symbol on a line of
+  its own (`PaymentService,`), which the line-based rule read as an active
+  usage — inflating the blast radius and the score with files that merely
+  import the symbol.
+- **Renames are diffed against their previous content**: a rename used to be
+  split into a delete plus an add, so every line of the new path counted as
+  modified and every symbol in it was marked as touched. It is now reported
+  as one modification of the new path, carrying `previousPath`.
+- **Changes that only delete code are detected**: removals have no line of
+  their own in the new file and were ignored entirely, so dropping a
+  validation inside a function marked no symbol and reported no impact. The
+  removed code's position is now recorded.
+- **Base branch detection keeps the remote prefix and slashes**:
+  `refs/remotes/origin/release/2.0` resolved to `2.0`, a ref that does not
+  exist. It now resolves to `origin/release/2.0`, which also works in CI
+  clones that never create the local branch.
+- **JavaScript files no longer crash the analysis**: a changed `.js` file
+  reached `findReferences` on a file the TypeScript program did not contain
+  and killed the run with an uncaught error. Such files are now skipped and
+  reported through the `unsupported-source-files` warning.
+- **Risk reasons add up to the score**: each factor is rounded once and the
+  score is the sum of the points shown, instead of rounding the total
+  separately and disagreeing with the printed reasons.
+- Unmerged or unknown git statuses no longer abort the run with an uncaught
+  error; type changes (`T`) are treated as modifications.
+- The engine no longer writes to stdout when the directory is not a Git
+  repository, which polluted the `--json` document.
+
 ## [1.2.0] - 2026-08-24
 
 ### Added

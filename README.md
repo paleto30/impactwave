@@ -2,7 +2,7 @@
 
 > **🌐 [English](README.en.md) | Español**
 
-**Analizador de blast radius para TypeScript y JavaScript.**
+**Analizador de blast radius para TypeScript.**
 
 ImpactWave es una CLI que analiza tus cambios en Git antes de hacer merge y responde una pregunta:
 
@@ -37,7 +37,7 @@ npm install -g impactwave   # o úsalo sin instalar:
 npx impactwave
 ```
 
-Requisitos: Node ≥ 22.12, un repositorio Git local y un proyecto TypeScript/JavaScript.
+Requisitos: Node ≥ 22.12, un repositorio Git local y un proyecto TypeScript.
 
 ## Uso
 
@@ -112,7 +112,7 @@ impactwave analyze --json -b main | jq -e '.risk.level | inside("LOW|MEDIUM")' >
 ## Cómo funciona
 
 1. **Git**: detecta el repo, la rama base y los archivos modificados (A/M/D).
-2. **AST**: ts-morph extrae exports e imports de los archivos cambiados, usando un único proyecto con los `compilerOptions` de tu `tsconfig.json` raíz y los archivos descubiertos por un recorrido propio del árbol (tolerante a directorios ilegibles).
+2. **AST**: ts-morph extrae exports e imports de los archivos cambiados, usando un único proyecto con los `compilerOptions` de tu `tsconfig.json` raíz y los archivos TypeScript (`.ts`, `.tsx`, `.mts`, `.cts`) descubiertos por un recorrido propio del árbol (tolerante a directorios ilegibles).
 3. **Símbolos modificados**: intersecta los rangos de líneas de cada símbolo exportado con las líneas del diff.
 4. **Consumidores reales**: `findReferences` encuentra los usos activos de cada símbolo (los imports puros no cuentan como impacto).
 5. **Grafo de dependencias**: índice inverso y directo de imports relativos —incluidas las cargas dinámicas `import(...)`/`require(...)` con argumento estático— + recorrido transitivo (BFS) con profundidad.
@@ -121,19 +121,22 @@ impactwave analyze --json -b main | jq -e '.risk.level | inside("LOW|MEDIUM")' >
 
 ## Modelo de riesgo
 
-Cinco factores con umbrales de saturación. Pesos por defecto (configurables con `--risk-weights`):
+Cinco factores con umbrales de saturación, más uno opcional. Pesos por defecto (configurables con `--risk-weights`):
 
 | Factor | Peso | Señal |
 |---|---|---|
-| Caller impact | 30 | consumidores directos de símbolos modificados (umbral 10) |
-| Affected files | 20 | archivos alcanzados transitivamente (umbral 15) |
-| Dependency depth | 15 | niveles de profundidad máxima (umbral 4) |
-| Test gaps | 20 | proporción de áreas afectadas sin tests |
-| Change size | 15 | líneas modificadas (umbral 200) |
+| `callerImpact` | 30 | consumidores directos de símbolos modificados (umbral 10) |
+| `affectedFiles` | 20 | archivos alcanzados transitivamente (umbral 15) |
+| `dependencyDepth` | 15 | niveles de profundidad máxima (umbral 4) |
+| `testGaps` | 20 | proporción de áreas afectadas sin tests |
+| `changeSize` | 15 | líneas modificadas (umbral 200) |
+| `testCallerImpact` | — | opcional: si se define, los consumidores que son tests salen de `callerImpact` y saturan este peso (`0` los exime del score) |
 
 Niveles: `0-25 LOW · 26-50 MEDIUM · 51-75 HIGH · 76-100 CRITICAL`.
 
-Los nombres de los factores son las claves JSON de `--risk-weights` (todas opcionales; las omitidas valen 0).
+Los nombres de los factores son las claves JSON de `--risk-weights` (todas opcionales; las omitidas valen 0). Los puntos de cada razón del reporte suman exactamente el score, salvo cuando satura en 100.
+
+Dos de los factores (`affectedFiles` y `dependencyDepth`, 35 puntos) se calculan sobre el **grafo estático** de dependencias, no sobre los consumidores reales: miden cuánta superficie del proyecto queda expuesta al archivo cambiado.
 
 ## El reporte
 
@@ -174,13 +177,33 @@ dentro de una versión solo hay cambios aditivos. Los usos de símbolos viajan
 sin filtrar, marcados con `importOnly: true` cuando son solo cableado de
 contrato (`import`, re-exports).
 
+## Alcance
+
+ImpactWave es un **prototipo** con un alcance deliberadamente acotado: hace bien una cosa y declara el resto fuera de alcance en vez de aproximarlo.
+
+**Dentro del alcance:**
+
+- Proyectos **TypeScript**: `.ts`, `.tsx`, `.mts`, `.cts`.
+- Cambios **ya commiteados**, comparando `base..HEAD` en un repositorio Git local.
+- Imports **relativos** dentro del proyecto, estáticos y dinámicos con argumento estático.
+- Análisis local, sin red: tu código nunca sale de tu máquina.
+
+**Fuera del alcance (por decisión, no por descuido):**
+
+- **JavaScript** (`.js`, `.jsx`, `.mjs`, `.cjs`). No se descubren ni se parsean. Si un cambio los toca, se omiten y el reporte lo dice con la advertencia `unsupported-source-files`: un reporte limitado es útil, uno que parece completo sin serlo es peligroso.
+- Otros lenguajes.
+- Cambios sin commitear en el working tree.
+- `node_modules`, path aliases no relativos y monorepos con varios tsconfigs (solo se usa el de la raíz).
+- Análisis semántico del cambio: la herramienta dice *qué* símbolo cambió y *quién* lo usa, no si el cambio rompe el contrato.
+
 ## Limitaciones conocidas
 
-- Compara commits; los cambios sin commitear en el working tree no se analizan.
+- **Granularidad del "símbolo modificado"**: es la intersección del diff con el rango de líneas de la declaración. Un cambio no funcional (un comentario, un reformateo) dentro de ese rango marca el símbolo como modificado.
+- **Archivos eliminados**: no se analizan sus símbolos ni sus consumidores. Si borras un archivo que otros siguen importando, el reporte no lo señala.
+- **Renombrados**: se reportan como una modificación de la ruta nueva (con `previousPath`), comparada contra el contenido anterior.
 - La cobertura de tests es transitiva: un test cubre los archivos que alcanza a través del grafo de dependencias hasta 4 saltos (`DEFAULT_TEST_COVERAGE_DEPTH`, configurable por llamada), evitando que un test que importa la raíz del proyecto reclame cobertura sobre todo el codebase.
-- El grafo solo considera imports relativos (no `node_modules` ni path aliases), estáticos o dinámicos (`import(...)`/`require(...)` con argumento no estático quedan registrados como advertencia `unresolved-dynamic-imports`).
-- En monorepos con varios tsconfigs, solo se usa el de la raíz; el descubrimiento de fuentes recorre todo el árbol (omitiendo `node_modules`/`dist`/`build`, ocultos y rutas ilegibles).
-- Los directorios sin permiso de lectura (ej. `pg_data`) se omiten; no abortan el análisis.
+- Los imports dinámicos con argumento no estático (template literals con variables, concatenaciones) no son resolubles: se registran y se reportan con la advertencia `unresolved-dynamic-imports`.
+- El descubrimiento de fuentes recorre todo el árbol omitiendo `node_modules`/`dist`/`build`, directorios ocultos y symlinks. Los directorios sin permiso de lectura (ej. el `pg_data` de Docker) se omiten; no abortan el análisis.
 
 ## Desarrollo
 
@@ -190,7 +213,7 @@ npm run build  # compilación a dist/
 npm run dev    # ejecutar en desarrollo
 ```
 
-Los fixtures en `test/fixtures/` validan el análisis contra proyectos artificiales: `simple-project` (cadena A→B→C), `circular-dependencies` (X↔Y), `barrel-exports` (re-exports por barrel) y `test-coverage` (servicios con y sin tests).
+Los fixtures en `test/fixtures/` validan el análisis contra proyectos artificiales: `simple-project` (cadena A→B→C), `circular-dependencies` (X↔Y), `barrel-exports` (re-exports por barrel), `test-coverage` y `test-coverage-transitive` (servicios con y sin tests, cadenas largas y ciclos), `dynamic-imports` (cargas dinámicas resolubles y no resolubles) e `import-shapes` (imports y re-exports multilínea).
 
 Para contribuir: abre un [issue](https://github.com/paleto30/impactwave/issues) o envía un PR. Las prioridades y mejoras candidatas están documentadas en [docs/ROADMAP.md](docs/ROADMAP.md); el historial de versiones, en [CHANGELOG.md](CHANGELOG.md).
 

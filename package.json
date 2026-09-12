@@ -24,7 +24,6 @@
     "code analysis",
     "static analysis",
     "typescript",
-    "javascript",
     "node",
     "cli",
     "developer tools",
@@ -44,7 +43,7 @@
     "node": ">=22.12.0"
   },
   "license": "ISC",
-  "description": "Blast radius analyzer CLI for TypeScript and JavaScript: find which exported symbols your Git changes modify, who consumes them, what tests cover them, and get a deterministic risk score before merging.",
+  "description": "Blast radius analyzer CLI for TypeScript: find which exported symbols your Git changes modify, who consumes them, what tests cover them, and get a deterministic risk score before merging.",
   "dependencies": {
     "commander": "^15.0.0",
     "simple-git": "^3.36.0",

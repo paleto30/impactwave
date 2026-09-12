@@ -34,6 +34,18 @@ describe("addProjectSourceFiles", () => {
             "export const util = (): number => 1;\n"
         );
 
+        // TypeScript's module-flavored extensions are in scope...
+        writeFileSync(
+            path.join(dir, "modern.mts"),
+            "export const modern = (): number => 2;\n"
+        );
+        // ...JavaScript is not: loading it half-way produced reports that
+        // looked complete while missing every JS consumer.
+        writeFileSync(
+            path.join(dir, "legacy.js"),
+            "export const legacy = () => 3;\n"
+        );
+
         // simulates a Docker-owned data directory (e.g. pg_data, 0700)
         mkdirSync(path.join(dir, "locked-data"));
         writeFileSync(
@@ -58,6 +70,6 @@ describe("addProjectSourceFiles", () => {
             .map(f => path.relative(dir, f.getFilePath()))
             .sort();
 
-        assert.deepEqual(loaded, ["lib/util.ts", "src.ts"]);
+        assert.deepEqual(loaded, ["lib/util.ts", "modern.mts", "src.ts"]);
     });
 });
