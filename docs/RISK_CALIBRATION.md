@@ -54,7 +54,7 @@ las mediciones son comparables entre sí y con el código de hoy.
 
 - **Motor con el que se midió**: estado de `master` en el commit `8ddac8b`,
   es decir la versión 1.2.0 del paquete más las correcciones de precisión
-  registradas en `CHANGELOG.md` bajo *Unreleased* (detección de cambios que
+  publicadas en la 1.3.0 (detección de cambios que
   solo borran líneas, clasificación del cableado por AST, renombrados
   comparados contra su contenido anterior y redondeo por factor).
 - **Fecha**: septiembre de 2026.

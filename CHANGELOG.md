@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-12
+
+### Added
+
+- **Engine capability sheet** (`docs/CAPABILITIES.md`): a factual, code-verified
+  description of what the engine does — analyzed extensions, pipeline stages,
+  the "real consumer" criterion, risk factors with the stage each one draws
+  from, and known limitations with their technical cause. Written to be the
+  reference any other document is checked against before making a claim.
+
 ### Changed
 
 - **Scope is now explicitly TypeScript only** (`.ts`, `.tsx`, `.mts`,
@@ -155,7 +165,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   test files, deterministic risk score (0–100) with explainable reasons, and
   configurable risk weights via `--risk-weights`.
 
-[Unreleased]: https://github.com/paleto30/impactwave/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/paleto30/impactwave/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/paleto30/impactwave/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/paleto30/impactwave/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/paleto30/impactwave/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/paleto30/impactwave/compare/v1.0.0...v1.0.1

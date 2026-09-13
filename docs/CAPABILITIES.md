@@ -199,5 +199,4 @@ sean números finitos. **No valida que la suma sea 100.**
 
 ## Afirmaciones NO VERIFICADAS
 
-Ninguna. Todo lo anterior se contrastó contra el código en la rama
-`docs/capabilities-and-scope-cleanup`.
+Ninguna. Todo lo anterior se contrastó contra el código de la versión 1.3.0.
